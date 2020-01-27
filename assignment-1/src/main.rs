@@ -6,9 +6,9 @@ use ring::digest;
 use hex;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct NameHash {
-    name: String,
-    hash: String,
+struct NameHash<'a> {
+    name: &'a str,
+    hash: &'a str,
 }
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
 
     let hex_string = hex::encode(signature);
 
-    let name_hash = NameHash {name: name.to_string(), hash: hex_string.to_string()};
+    let name_hash = NameHash {name: &name, hash: &hex_string};
     println!("{:?}", name_hash);
 
     let encoded: Vec<u8> = bincode::serialize(&name_hash).unwrap();
