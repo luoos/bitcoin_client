@@ -1,9 +1,7 @@
-#[macro_use]
-extern crate serde_derive;
-
 use bincode;
 use ring::digest;
 use hex;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct NameHash<'a> {
