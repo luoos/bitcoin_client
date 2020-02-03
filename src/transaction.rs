@@ -1,5 +1,3 @@
-use rand::thread_rng;
-use rand::distributions::Distribution;
 use serde::{Serialize,Deserialize};
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 
@@ -28,6 +26,8 @@ pub fn verify(t: &Transaction, public_key: &<Ed25519KeyPair as KeyPair>::PublicK
 mod tests {
     use super::*;
     use crate::crypto::key_pair;
+    use rand::thread_rng;
+    use rand::distributions::Distribution;
 
     fn generate_random_str() -> String {
         let rng = thread_rng();
