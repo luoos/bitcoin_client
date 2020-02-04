@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use std::convert::TryInto;
+use ring::digest;
 
 /// An object that can be meaningfully hashed.
 pub trait Hashable {
@@ -10,6 +11,17 @@ pub trait Hashable {
 /// A SHA256 hash.
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
 pub struct H256([u8; 32]); // big endian u256
+
+impl H256 {
+    pub fn concat_hash(&mut self, input: &H256) {
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(self.0.as_ref());
+        ctx.update(input.as_ref());
+        let mut raw_hash: [u8; 32] = [0; 32];
+        raw_hash[0..32].copy_from_slice(ctx.finish().as_ref());
+        self.0 = raw_hash;
+    }
+}
 
 impl Hashable for H256 {
     fn hash(&self) -> H256 {
