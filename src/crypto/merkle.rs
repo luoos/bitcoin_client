@@ -21,6 +21,16 @@ impl Node {
         Self {hash: data.hash(), left: None, right: None, is_leaf: true, index: idx}
     }
 
+    fn new_non_leaf(left: Node, right: Node) -> Self {
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(left.hash.as_ref());
+        ctx.update(right.hash.as_ref());
+        let h: H256 = ctx.finish().into();
+        let i = ((left.index as f32 + right.index as f32)/2.0).ceil() as usize;
+        Node {hash: h, left: Some(Box::new(left)), right: Some(Box::new(right)),
+                is_leaf: false, index: i}
+    }
+
     fn left_node(&self) -> Result<&Node, &'static str> {
         match self.left {
             Some(ref x) => Ok(x),
@@ -41,33 +51,9 @@ impl Node {
     }
 }
 
-fn get_split_index(l: usize) -> usize {
-    let i = (l as f64).log2();
-    let i = (i.ceil() as u32) - 1;
-    2u32.pow(i) as usize
-}
-
-fn generate_node<T>(data: &[T], offset: usize) -> Node where T: Hashable {
-    if data.len() == 1 {
-        Node {hash: data[0].hash(), left: None, right: None,
-              is_leaf: true, index: offset}
-    } else {
-        let i = get_split_index(data.len());
-        let left = generate_node(&data[..i], offset);
-        let right = generate_node(&data[i..], offset+i);
-        let mut ctx = digest::Context::new(&digest::SHA256);
-        ctx.update(left.hash.as_ref());
-        ctx.update(right.hash.as_ref());
-        let h: H256 = ctx.finish().into();
-        Node {hash: h, left: Some(Box::new(left)), right: Some(Box::new(right)),
-              is_leaf: false, index: offset+i}
-    }
-}
-
 fn ensure_even(nodes: &mut Vec<Node>, step: usize) {
     if nodes.len() % 2 != 0 {
-        let last_node = nodes.last().unwrap();
-        nodes.push(last_node.copy(step));
+        nodes.push(nodes.last().unwrap().copy(step));
     }
 }
 
@@ -79,16 +65,6 @@ fn gen_nodes<T>(data: &[T]) -> Vec<Node> where T: Hashable {
     nodes
 }
 
-fn concate_two_nodes(left: Node, right: Node) -> Node {
-    let mut ctx = digest::Context::new(&digest::SHA256);
-    ctx.update(left.hash.as_ref());
-    ctx.update(right.hash.as_ref());
-    let h: H256 = ctx.finish().into();
-    let i = ((left.index as f32 + right.index as f32)/2.0).ceil() as usize;
-    Node {hash: h, left: Some(Box::new(left)), right: Some(Box::new(right)),
-          is_leaf: false, index: i}
-}
-
 impl MerkleTree {
     pub fn new<T>(data: &[T]) -> Self where T: Hashable + Clone, {
         let mut nodes = gen_nodes(data);
@@ -97,15 +73,13 @@ impl MerkleTree {
             let mut cur = Vec::<Node>::new();
             {
                 ensure_even(&mut nodes, step);
-                let mut left_node: Node;
-                let mut right_node: Node;
 
-                let L = nodes.len();
+                let l = nodes.len();
                 let mut c = 0;
                 let mut drain = nodes.drain(..);
 
-                while c < L {
-                    cur.push(concate_two_nodes(drain.next().unwrap(), drain.next().unwrap()));
+                while c < l {
+                    cur.push(Node::new_non_leaf(drain.next().unwrap(), drain.next().unwrap()));
                     c += 2;
                 }
             }
@@ -144,7 +118,7 @@ impl MerkleTree {
 
 /// Verify that the datum hash with a vector of proofs will produce the Merkle root. Also need the
 /// index of datum and `leaf_size`, the total number of leaves.
-pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
+pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, _leaf_size: usize) -> bool {
     let mut acc_hash = datum.clone();
     let mut bits = index;
     for h in proof.iter() {
@@ -292,18 +266,6 @@ mod tests {
     }
 
     #[test]
-    fn split_index() {
-        assert_eq!(8, get_split_index(9));
-        assert_eq!(4, get_split_index(8));
-        assert_eq!(4, get_split_index(7));
-        assert_eq!(4, get_split_index(6));
-        assert_eq!(4, get_split_index(5));
-        assert_eq!(2, get_split_index(4));
-        assert_eq!(2, get_split_index(3));
-        assert_eq!(1, get_split_index(2));
-    }
-
-    #[test]
     fn test_gen_nodes() {
         let input_data: Vec<H256> = gen_merkle_tree_data_3!();
         let v = gen_nodes(&input_data);
@@ -311,8 +273,8 @@ mod tests {
         for i in 0..input_data.len() {
             assert_eq!(&input_data[i].hash(), &v[i].hash);
             assert_eq!(&input_data[i].hash(), &v[i].hash);
-            assert_eq!(v[i].index, i);
-            assert_eq!(v[i].is_leaf, true);
+            assert_eq!(i, v[i].index);
+            assert!(v[i].is_leaf);
         }
     }
 
@@ -320,15 +282,10 @@ mod tests {
     fn test_ensure_even() {
         let input_data: Vec<H256> = gen_merkle_tree_data_3!();
         let mut v = gen_nodes(&input_data);
-        let before = v.len();
-        assert!(before % 2 == 0);
         ensure_even(&mut v, 1);
-        assert_eq!(before, v.len());
+        assert!(v.len() % 2 == 0);
         v.pop();
-        let before = v.len();
-        assert!(before % 2 != 0);
         ensure_even(&mut v, 3);
-        assert_eq!(v.len(), before+1);
-        assert_eq!(v[v.len()-1].index - v[v.len()-2].index, 3);
+        assert!(v.len() % 2 == 0);
     }
 }
