@@ -13,10 +13,15 @@ pub trait Hashable {
 pub struct H256([u8; 32]); // big endian u256
 
 impl H256 {
-    pub fn concat_hash(&mut self, input: &H256) {
+    pub fn concat_hash(&mut self, input: &H256, left: bool) {
         let mut ctx = digest::Context::new(&digest::SHA256);
-        ctx.update(self.0.as_ref());
-        ctx.update(input.as_ref());
+        if left {
+            ctx.update(self.0.as_ref());
+            ctx.update(input.as_ref());
+        } else {
+            ctx.update(input.as_ref());
+            ctx.update(self.0.as_ref());
+        }
         let mut raw_hash: [u8; 32] = [0; 32];
         raw_hash[0..32].copy_from_slice(ctx.finish().as_ref());
         self.0 = raw_hash;

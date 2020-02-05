@@ -7,7 +7,7 @@ pub struct MerkleTree {
     root: Node,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Node {
     hash: H256,
     left: Option<Box<Node>>,
@@ -17,18 +17,27 @@ pub struct Node {
 }
 
 impl Node {
-    fn leftNode(&self) -> Result<&Node, &'static str> {
+    fn new_leaf<T>(data: &T, idx: usize) -> Self where T: Hashable {
+        Self {hash: data.hash(), left: None, right: None, is_leaf: true, index: idx}
+    }
+
+    fn left_node(&self) -> Result<&Node, &'static str> {
         match self.left {
             Some(ref x) => Ok(x),
             None => Err("No left child"),
         }
     }
 
-    fn rightNode(&self) -> Result<&Node, &'static str> {
+    fn right_node(&self) -> Result<&Node, &'static str> {
         match self.right {
             Some(ref x) => Ok(x),
             None => Err("No right child"),
         }
+    }
+
+    fn copy(&self, step: usize) -> Node {
+        Node {hash: self.hash.clone(), left: None,
+              right: None, is_leaf: true, index: self.index+step}
     }
 }
 
@@ -55,14 +64,55 @@ fn generate_node<T>(data: &[T], offset: usize) -> Node where T: Hashable {
     }
 }
 
+fn ensure_even(nodes: &mut Vec<Node>, step: usize) {
+    if nodes.len() % 2 != 0 {
+        let last_node = nodes.last().unwrap();
+        nodes.push(last_node.copy(step));
+    }
+}
+
+fn gen_nodes<T>(data: &[T]) -> Vec<Node> where T: Hashable {
+    let mut nodes = Vec::<Node>::new();
+    for (i, d) in data.iter().enumerate() {
+        nodes.push(Node::new_leaf(d, i));
+    }
+    nodes
+}
+
+fn concate_two_nodes(left: Node, right: Node) -> Node {
+    let mut ctx = digest::Context::new(&digest::SHA256);
+    ctx.update(left.hash.as_ref());
+    ctx.update(right.hash.as_ref());
+    let h: H256 = ctx.finish().into();
+    let i = ((left.index as f32 + right.index as f32)/2.0).ceil() as usize;
+    Node {hash: h, left: Some(Box::new(left)), right: Some(Box::new(right)),
+          is_leaf: false, index: i}
+}
+
 impl MerkleTree {
     pub fn new<T>(data: &[T]) -> Self where T: Hashable + Clone, {
-        let mut copy = data.to_vec();
-        if copy.len() > 0 && copy.len() % 2 != 0 {  // odd, duplicate last item
-            copy.push(copy.last().unwrap().clone());
+        let mut nodes = gen_nodes(data);
+        let mut step = 1;
+        while nodes.len() > 1 {
+            let mut cur = Vec::<Node>::new();
+            {
+                ensure_even(&mut nodes, step);
+                let mut left_node: Node;
+                let mut right_node: Node;
+
+                let L = nodes.len();
+                let mut c = 0;
+                let mut drain = nodes.drain(..);
+
+                while c < L {
+                    cur.push(concate_two_nodes(drain.next().unwrap(), drain.next().unwrap()));
+                    c += 2;
+                }
+            }
+            nodes = cur;
+            step *= 2;
         }
-        let root = generate_node(&copy, 0);
-        Self {root: root}
+        Self {root: nodes.pop().unwrap()}
     }
 
     pub fn root(&self) -> H256 {
@@ -79,8 +129,8 @@ impl MerkleTree {
 
     fn trace_proof(&self, index: usize, node: &Node, result: &mut Vec<H256>) {
         if !node.is_leaf {
-            let left:  &Node = node.leftNode().unwrap();
-            let right: &Node = node.rightNode().unwrap();
+            let left:  &Node = node.left_node().unwrap();
+            let right: &Node = node.right_node().unwrap();
             if index < node.index {
                 result.push(right.hash.clone());
                 self.trace_proof(index, left, result)
@@ -96,8 +146,10 @@ impl MerkleTree {
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
     let mut acc_hash = datum.clone();
+    let mut bits = index;
     for h in proof.iter() {
-        acc_hash.concat_hash(h);
+        acc_hash.concat_hash(h, bits % 2 == 0);
+        bits = bits >> 1;
     }
     acc_hash == *root
 }
@@ -123,6 +175,23 @@ mod tests {
                 (hex!("0101010101010101010101010101010101010101010101010101010101010202")).into(),
                 (hex!("0301010101010101010101010101010101010101010101010101010101010202")).into(),
                 (hex!("0401010101010101010101010101010101010101010101010101010101010202")).into(),
+            ]
+        }};
+    }
+
+    macro_rules! gen_merkle_tree_data_3 {
+        () => {{
+            vec![
+                (hex!("000b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d")).into(),
+                (hex!("0101010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0201010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0301010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0401010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0501010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0601010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0701010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0801010101010101010101010101010101010101010101010101010101010202")).into(),
+                (hex!("0901010101010101010101010101010101010101010101010101010101010202")).into(),
             ]
         }};
     }
@@ -201,6 +270,25 @@ mod tests {
         let merkle_tree = MerkleTree::new(&input_data);
         let proof = merkle_tree.proof(0);
         assert!(verify(&merkle_tree.root(), &input_data[0].hash(), &proof, 0, input_data.len()));
+
+        let proof = merkle_tree.proof(1);
+        assert!(verify(&merkle_tree.root(), &input_data[1].hash(), &proof, 1, input_data.len()));
+
+        let input_data: Vec<H256> = gen_merkle_tree_data_2!();
+        let merkle_tree = MerkleTree::new(&input_data);
+
+        for i in 0..input_data.len() {
+            let proof = merkle_tree.proof(i);
+            assert!(verify(&merkle_tree.root(), &input_data[i].hash(), &proof, i, input_data.len()));
+        }
+
+        let input_data: Vec<H256> = gen_merkle_tree_data_3!();
+        let merkle_tree = MerkleTree::new(&input_data);
+
+        for i in 0..input_data.len() {
+            let proof = merkle_tree.proof(i);
+            assert!(verify(&merkle_tree.root(), &input_data[i].hash(), &proof, i, input_data.len()));
+        }
     }
 
     #[test]
@@ -210,8 +298,37 @@ mod tests {
         assert_eq!(4, get_split_index(7));
         assert_eq!(4, get_split_index(6));
         assert_eq!(4, get_split_index(5));
-        assert_eq!(2, get_split_index(3));
         assert_eq!(2, get_split_index(4));
+        assert_eq!(2, get_split_index(3));
         assert_eq!(1, get_split_index(2));
+    }
+
+    #[test]
+    fn test_gen_nodes() {
+        let input_data: Vec<H256> = gen_merkle_tree_data_3!();
+        let v = gen_nodes(&input_data);
+        assert_eq!(input_data.len(), v.len());
+        for i in 0..input_data.len() {
+            assert_eq!(&input_data[i].hash(), &v[i].hash);
+            assert_eq!(&input_data[i].hash(), &v[i].hash);
+            assert_eq!(v[i].index, i);
+            assert_eq!(v[i].is_leaf, true);
+        }
+    }
+
+    #[test]
+    fn test_ensure_even() {
+        let input_data: Vec<H256> = gen_merkle_tree_data_3!();
+        let mut v = gen_nodes(&input_data);
+        let before = v.len();
+        assert!(before % 2 == 0);
+        ensure_even(&mut v, 1);
+        assert_eq!(before, v.len());
+        v.pop();
+        let before = v.len();
+        assert!(before % 2 != 0);
+        ensure_even(&mut v, 3);
+        assert_eq!(v.len(), before+1);
+        assert_eq!(v[v.len()-1].index - v[v.len()-2].index, 3);
     }
 }
