@@ -7,7 +7,7 @@ pub struct MerkleTree {
     root: Node,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct Node {
     hash: H256,
     left: Option<Box<Node>>,
