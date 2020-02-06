@@ -31,20 +31,6 @@ impl Node {
                 is_leaf: false, index: i}
     }
 
-    fn left_node(&self) -> Result<&Node, &'static str> {
-        match self.left {
-            Some(ref x) => Ok(x),
-            None => Err("No left child"),
-        }
-    }
-
-    fn right_node(&self) -> Result<&Node, &'static str> {
-        match self.right {
-            Some(ref x) => Ok(x),
-            None => Err("No right child"),
-        }
-    }
-
     fn copy(&self, step: usize) -> Node {
         Node {hash: self.hash.clone(), left: None,
               right: None, is_leaf: true, index: self.index+step}
@@ -94,24 +80,26 @@ impl MerkleTree {
     }
 
     /// Returns the Merkle Proof of data at index i
-    pub fn proof(&self, index: usize) -> Vec<H256> {
+    pub fn proof(&self, idx: usize) -> Vec<H256> {
         let mut result = Vec::<H256>::new();
-        self.trace_proof(index, &self.root, &mut result);
+        self.trace_proof(idx, &self.root, &mut result);
         result.reverse();
         result
     }
 
-    fn trace_proof(&self, index: usize, node: &Node, result: &mut Vec<H256>) {
-        if !node.is_leaf {
-            let left:  &Node = node.left_node().unwrap();
-            let right: &Node = node.right_node().unwrap();
-            if index < node.index {
-                result.push(right.hash.clone());
-                self.trace_proof(index, left, result)
-            } else {
-                result.push(left.hash.clone());
-                self.trace_proof(index, right, result)
+    fn trace_proof(&self, idx: usize, node: &Node, result: &mut Vec<H256>) {
+        match *node {
+            Node {hash: _, is_leaf: _, index,
+                  left: Some(ref left), right: Some(ref right)} => {
+                if idx < index {
+                    result.push(right.hash.clone());
+                    self.trace_proof(idx, left, result);
+                } else {
+                    result.push(left.hash.clone());
+                    self.trace_proof(idx, right, result);
+                }
             }
+            _ => {}
         }
     }
 }
