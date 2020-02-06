@@ -132,6 +132,7 @@ pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, _leaf_siz
 mod tests {
     use crate::crypto::hash::H256;
     use super::*;
+    use rand::Rng;
 
     macro_rules! gen_merkle_tree_data {
         () => {{
@@ -187,6 +188,19 @@ mod tests {
     // "95f92a9251eec866f3e32a08cd7edcbfcfb86da23fcdd6eb50789c293c2b8d1a"
     // ->
     // "12a38f5e8e70569659512f79885f0b6e8d95b13ebee4a2bfc63a4c6fc6b64d80"
+
+    fn gen_random_h256() -> H256 {
+        let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
+        random_bytes.into()
+    }
+
+    fn gen_random_h256_vec(size: usize) -> Vec<H256> {
+        let mut vec = Vec::<H256>::new();
+        for _ in 0..size {
+            vec.push(gen_random_h256());
+        }
+        vec
+    }
 
     #[test]
     fn root() {
@@ -262,6 +276,16 @@ mod tests {
         for i in 0..input_data.len() {
             let proof = merkle_tree.proof(i);
             assert!(verify(&merkle_tree.root(), &input_data[i].hash(), &proof, i, input_data.len()));
+        }
+
+        for size in 1..66 {
+            let input_data: Vec<H256> = gen_random_h256_vec(size);
+            let merkle_tree = MerkleTree::new(&input_data);
+
+            for i in 0..input_data.len() {
+                let proof = merkle_tree.proof(i);
+                assert!(verify(&merkle_tree.root(), &input_data[i].hash(), &proof, i, input_data.len()));
+            }
         }
     }
 
