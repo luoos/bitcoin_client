@@ -30,6 +30,30 @@ impl Hashable for Block {
     }
 }
 
+impl Block {
+    fn genesis() -> Self {
+        let h: [u8; 32] = [0; 32];
+        let header = Header {
+            parent: h.into(),
+            nonce: 0,
+            difficulty: h.into(),
+            timestamp: 0,
+            merkle_root: h.into(),
+        };
+
+        let content = Content {
+            trans: Vec::<Transaction>::new(),
+        };
+
+        Block {
+            hash: h.into(),
+            index: 0,
+            header: header,
+            content: content,
+        }
+    }
+}
+
 #[cfg(any(test, test_utilities))]
 pub mod test {
     use super::*;
@@ -37,5 +61,12 @@ pub mod test {
 
     pub fn generate_random_block(parent: &H256) -> Block {
         unimplemented!()
+    }
+
+    #[test]
+    fn test_genesis() {
+        let g = Block::genesis();
+        assert_eq!(0, g.index);
+        assert_eq!(g.hash, H256::from([0u8; 32]));
     }
 }
