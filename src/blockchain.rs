@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 use crate::block::Block;
 use crate::crypto::hash::H256;
 
 pub struct Blockchain {
+    blocks: HashMap<H256, Block>,
+    longest_hash: H256,
 }
 
 impl Blockchain {
