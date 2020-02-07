@@ -26,12 +26,12 @@ pub struct Content {
 
 impl Hashable for Block {
     fn hash(&self) -> H256 {
-        unimplemented!()
+        self.hash.clone()
     }
 }
 
 impl Block {
-    fn genesis() -> Self {
+    pub fn genesis() -> Self {
         let h: [u8; 32] = [0; 32];
         let header = Header {
             parent: h.into(),
@@ -51,6 +51,10 @@ impl Block {
             header: header,
             content: content,
         }
+    }
+
+    pub fn get_hash(&self) -> H256 {
+        self.hash.clone()
     }
 }
 
