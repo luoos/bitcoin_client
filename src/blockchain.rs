@@ -23,7 +23,20 @@ impl Blockchain {
 
     /// Insert a block into blockchain
     pub fn insert(&mut self, block: &Block) {
-        unimplemented!()
+        let mut b = block.clone();
+        let prev_hash = &b.header.parent;
+        match self.blocks.get(prev_hash) {
+            Some(prev_block) => {
+                let cur_index = prev_block.index + 1;
+                b.index = cur_index;
+                let longest_block = self.blocks.get(&self.longest_hash).unwrap();
+                if cur_index > longest_block.index {
+                    self.longest_hash = b.hash.clone();
+                }
+                self.blocks.insert(b.hash.clone(), b);
+            },
+            None => println!("Failed to get previous block")
+        }
     }
 
     /// Get the last block's hash of the longest chain
@@ -46,11 +59,11 @@ mod tests {
 
     #[test]
     fn insert_one() {
-        let blockchain = Blockchain::new();
+        let mut blockchain = Blockchain::new();
         let genesis_hash = blockchain.tip();
         assert_eq!(&genesis_hash, &H256::from([0u8; 32]));
-        // let block = generate_random_block(&genesis_hash);
-        // blockchain.insert(&block);
-        // assert_eq!(blockchain.tip(), block.hash());
+        let block = generate_random_block(&genesis_hash);
+        blockchain.insert(&block);
+        assert_eq!(blockchain.tip(), block.hash());
     }
 }

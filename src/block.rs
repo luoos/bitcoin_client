@@ -1,25 +1,27 @@
+use ring::digest;
 use serde::{Serialize, Deserialize};
 use crate::crypto::hash::{H256, Hashable};
 use crate::transaction::Transaction;
+use crate::crypto::merkle::MerkleTree;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
-    hash: H256,         // the hash of the header in this block
-    index: usize,       // the distance from the genesis block
-    header: Header,
+    pub hash: H256,         // the hash of the header in this block
+    pub index: usize,       // the distance from the genesis block
+    pub header: Header,
     content: Content,   // transaction in this block
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Header {
-    parent: H256,
+    pub parent: H256,
     nonce: u32,
     difficulty: H256,
     timestamp: usize,
     merkle_root: H256,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Content {
     trans: Vec<Transaction>
 }
@@ -53,8 +55,57 @@ impl Block {
         }
     }
 
+    pub fn new(header: Header, content: Content) -> Self {
+        Self {
+            hash: header.hash(),
+            index: 0,
+            header: header,
+            content: content,
+        }
+    }
+
     pub fn get_hash(&self) -> H256 {
         self.hash.clone()
+    }
+}
+
+impl Header {
+    pub fn new( parent: &H256, nonce: u32, timestamp: usize,
+                 difficulty: &H256, merkle_root: &H256) -> Self {
+        Self {
+            parent: parent.clone(),
+            nonce: nonce,
+            difficulty: difficulty.clone(),
+            timestamp: timestamp,
+            merkle_root: merkle_root.clone(),
+        }
+    }
+
+    pub fn hash(&self) -> H256 {
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(self.parent.as_ref());
+        ctx.update(&self.nonce.to_be_bytes());
+        ctx.update(self.difficulty.as_ref());
+        ctx.update(&self.timestamp.to_be_bytes());
+        ctx.update(self.merkle_root.as_ref());
+        ctx.finish().into()
+    }
+}
+
+impl Content {
+    pub fn new() -> Self {
+        Self {
+            trans: Vec::<Transaction>::new(),
+        }
+    }
+
+    pub fn add_tran(&mut self, tran: Transaction) {
+        self.trans.push(tran);
+    }
+
+    pub fn merkle_root(&self) -> H256 {
+        let tree = MerkleTree::new(&self.trans);
+        tree.root()
     }
 }
 
@@ -62,9 +113,37 @@ impl Block {
 pub mod test {
     use super::*;
     use crate::crypto::hash::H256;
+    use crate::transaction::tests::generate_random_transaction;
+    use crate::crypto::hash::tests::generate_random_hash;
+    use rand::Rng;
 
     pub fn generate_random_block(parent: &H256) -> Block {
-        unimplemented!()
+        let content = generate_random_content();
+        let header = generate_random_header(parent, &content);
+        Block::new(header, content)
+    }
+
+
+    pub fn generate_random_header(parent: &H256, content: &Content) -> Header {
+        let mut rng = rand::thread_rng();
+        let nonce: u32 = rng.gen();
+        let timestamp: usize = rng.gen();
+        let difficulty = generate_random_hash();
+        let merkle_root = content.merkle_root();
+        Header::new(
+            parent, nonce, timestamp,
+            &difficulty, &merkle_root
+        )
+    }
+
+    pub fn generate_random_content() -> Content {
+        let mut content = Content::new();
+        let mut rng = rand::thread_rng();
+        let size: u32 = rng.gen_range(10, 20);
+        for _ in 0..size {
+            content.add_tran(generate_random_transaction());
+        }
+        content
     }
 
     #[test]

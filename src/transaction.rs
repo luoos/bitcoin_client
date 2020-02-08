@@ -1,9 +1,20 @@
 use serde::{Serialize,Deserialize};
+use ring::digest;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+use crate::crypto::hash::{Hashable, H256};
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
     msg: String,
+}
+
+impl Hashable for Transaction {
+    fn hash(&self) -> H256 {
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(self.msg.as_ref());
+        ctx.finish().into()
+    }
 }
 
 /// Create digital signature of a transaction
@@ -23,7 +34,7 @@ pub fn verify(t: &Transaction, public_key: &<Ed25519KeyPair as KeyPair>::PublicK
 }
 
 #[cfg(any(test, test_utilities))]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::crypto::key_pair;
     use rand::thread_rng;
