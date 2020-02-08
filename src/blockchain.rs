@@ -66,4 +66,33 @@ mod tests {
         blockchain.insert(&block);
         assert_eq!(blockchain.tip(), block.hash());
     }
+
+    #[test]
+    fn switch_tip() {
+        /*
+         * structure:
+         * genesis <- block_1_1 <- block_1_2 <- block_1_3 <- block_1_4
+         *              ^
+         *              ---------  block_2_1 <- block_2_2
+         */
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block_1_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&block_1_1);
+        let block_1_2 = generate_random_block(&block_1_1.hash());
+        blockchain.insert(&block_1_2);
+        assert_eq!(blockchain.tip(), block_1_2.hash());
+        let block_2_1 = generate_random_block(&block_1_1.hash());
+        blockchain.insert(&block_2_1);
+        assert_eq!(blockchain.tip(), block_1_2.hash());
+        let block_2_2 = generate_random_block(&block_2_1.hash());
+        blockchain.insert(&block_2_2);
+        assert_eq!(blockchain.tip(), block_2_2.hash());
+        let block_1_3 = generate_random_block(&block_1_2.hash());
+        blockchain.insert(&block_1_3);
+        assert_eq!(blockchain.tip(), block_2_2.hash());
+        let block_1_4 = generate_random_block(&block_1_3.hash());
+        blockchain.insert(&block_1_4);
+        assert_eq!(blockchain.tip(), block_1_4.hash());
+    }
 }
