@@ -1,4 +1,5 @@
-use serde::{Serialize,Deserialize};
+use bincode;
+use serde::{Serialize, Deserialize};
 use ring::digest;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 
@@ -11,9 +12,8 @@ pub struct Transaction {
 
 impl Hashable for Transaction {
     fn hash(&self) -> H256 {
-        let mut ctx = digest::Context::new(&digest::SHA256);
-        ctx.update(self.msg.as_ref());
-        ctx.finish().into()
+        let serialized = bincode::serialize(self).unwrap();
+        digest::digest(&digest::SHA256, serialized.as_ref()).into()
     }
 }
 
