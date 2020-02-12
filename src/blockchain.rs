@@ -5,6 +5,7 @@ use crate::crypto::hash::H256;
 
 pub struct Blockchain {
     blocks: HashMap<H256, Block>,
+    orphans: HashMap<H256, Vec<Block>>, // key is the hash of the parent
     longest_hash: H256,
 }
 
@@ -14,9 +15,11 @@ impl Blockchain {
         let genesis = Block::genesis();
         let longest_hash = genesis.get_hash();
         let mut map: HashMap<H256, Block> = HashMap::new();
+        let orphans: HashMap<H256, Vec<Block>> = HashMap::new();
         map.insert(genesis.get_hash(), genesis);
         Self {
             blocks: map,
+            orphans: orphans,
             longest_hash: longest_hash
         }
     }
@@ -24,8 +27,8 @@ impl Blockchain {
     /// Insert a block into blockchain
     pub fn insert(&mut self, block: &Block) {
         let mut b = block.clone();
-        let prev_hash = &b.header.parent;
-        match self.blocks.get(prev_hash) {
+        let parent_hash = &b.header.parent;
+        match self.blocks.get(parent_hash) {
             Some(prev_block) => {
                 let cur_index = prev_block.index + 1;
                 b.index = cur_index;
@@ -33,9 +36,34 @@ impl Blockchain {
                 if cur_index > longest_block.index {
                     self.longest_hash = b.hash.clone();
                 }
+                let new_parent_hash = b.hash.clone();
                 self.blocks.insert(b.hash.clone(), b);
+                self.handle_orphan(&new_parent_hash);
             },
-            None => println!("Failed to get previous block")
+            None => {
+                match self.orphans.get_mut(parent_hash) {
+                    Some(children_vec) => {
+                        children_vec.push(b);
+                    },
+                    None => {
+                        let mut children_vec = Vec::<Block>::new();
+                        let parent_hash_copy = parent_hash.clone();
+                        children_vec.push(b);
+                        self.orphans.insert(parent_hash_copy, children_vec);
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_orphan(&mut self, new_parent: &H256) {
+        match self.orphans.remove(new_parent) {
+            Some(children_vec) => {
+                for child in children_vec.iter() {
+                    self.insert(child);
+                }
+            },
+            None => {}
         }
     }
 
@@ -94,5 +122,38 @@ mod tests {
         let block_1_4 = generate_random_block(&block_1_3.hash());
         blockchain.insert(&block_1_4);
         assert_eq!(blockchain.tip(), block_1_4.hash());
+    }
+
+    #[test]
+    fn handle_orphan() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash());
+        let block3 = generate_random_block(&block2.hash());
+        blockchain.insert(&block3);
+        blockchain.insert(&block2);
+        blockchain.insert(&block1);
+        assert_eq!(blockchain.tip(), block3.hash());
+
+        // naming rule: block_<branch>_<index>
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block_1_1 = generate_random_block(&genesis_hash);
+        let block_1_2 = generate_random_block(&block_1_1.hash());
+        let block_1_3 = generate_random_block(&block_1_2.hash());
+        let block_2_2 = generate_random_block(&block_1_1.hash());
+        let block_2_3 = generate_random_block(&block_2_2.hash());
+        let block_2_4 = generate_random_block(&block_2_3.hash());
+        let block_2_5 = generate_random_block(&block_2_4.hash());
+        blockchain.insert(&block_2_5);
+        blockchain.insert(&block_2_4);
+        blockchain.insert(&block_2_3);
+        blockchain.insert(&block_2_2);
+        blockchain.insert(&block_1_3);
+        blockchain.insert(&block_1_2);
+        assert_eq!(blockchain.tip(), genesis_hash);
+        blockchain.insert(&block_1_1);
+        assert_eq!(blockchain.tip(), block_2_5.hash());
     }
 }
