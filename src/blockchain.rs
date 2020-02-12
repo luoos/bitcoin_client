@@ -75,7 +75,17 @@ impl Blockchain {
     /// Get the last block's hash of the longest chain
     #[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
-        unimplemented!()
+        let mut cur_hash = self.tip();
+        let mut cur_block = self.blocks.get(&cur_hash).unwrap();
+        let mut index = cur_block.index as i32;
+        let mut result = Vec::<H256>::new();
+        while index >= 0 {
+            result.push(cur_hash);
+            cur_hash = cur_block.header.parent.clone();
+            cur_block = self.blocks.get(&cur_hash).unwrap();
+            index -= 1;
+        }
+        result
     }
 }
 
@@ -155,5 +165,21 @@ mod tests {
         assert_eq!(blockchain.tip(), genesis_hash);
         blockchain.insert(&block_1_1);
         assert_eq!(blockchain.tip(), block_2_5.hash());
+    }
+
+    #[test]
+    fn longest_chain_hash() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash());
+        let block3 = generate_random_block(&block2.hash());
+        blockchain.insert(&block3);
+        blockchain.insert(&block2);
+        blockchain.insert(&block1);
+        assert_eq!(blockchain.tip(), block3.hash());
+        let chain_hash = blockchain.all_blocks_in_longest_chain();
+        assert_eq!(chain_hash[0], block3.hash);
+        assert_eq!(chain_hash.last().unwrap(), &genesis_hash);
     }
 }
