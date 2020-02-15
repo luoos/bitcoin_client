@@ -15,8 +15,8 @@ pub struct Block {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Header {
     pub parent: H256,
-    nonce: u32,
-    difficulty: H256,
+    pub nonce: u32,
+    pub difficulty: H256,
     timestamp: usize,
     merkle_root: H256,
 }
@@ -32,13 +32,19 @@ impl Hashable for Block {
     }
 }
 
+static DIFFICULTY: usize = 4; // number of leading zero
+
 impl Block {
     pub fn genesis() -> Self {
         let h: [u8; 32] = [0; 32];
+        let mut difficulty: [u8; 32] = [std::u8::MAX; 32];
+        for i in 0..DIFFICULTY {
+            difficulty[i] = 0;
+        }
         let header = Header {
             parent: h.into(),
             nonce: 0,
-            difficulty: h.into(),
+            difficulty: difficulty.into(),
             timestamp: 0,
             merkle_root: h.into(),
         };
@@ -151,5 +157,11 @@ pub mod test {
         let g = Block::genesis();
         assert_eq!(0, g.index);
         assert_eq!(g.hash, H256::from([0u8; 32]));
+        let array: [u8; 32] = g.header.difficulty.into();
+        assert!(DIFFICULTY > 0);
+        assert!(DIFFICULTY < 32);
+        assert_eq!(0, array[0]);
+        assert_eq!(0, array[DIFFICULTY-1]);
+        assert_eq!(255, array[DIFFICULTY]);
     }
 }
