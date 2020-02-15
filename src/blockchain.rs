@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use log::info;
 
 use crate::block::Block;
 use crate::crypto::hash::H256;
@@ -30,6 +31,8 @@ impl Blockchain {
     pub fn insert(&mut self, block: &Block) {
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
+        info!("insert block: {:?}, nonce: {}, parent: {:?}",
+                &b.hash, b.header.nonce, parent_hash);
         match self.blocks.get(parent_hash) {
             Some(prev_block) => {
                 let cur_index = prev_block.index + 1;
@@ -75,6 +78,11 @@ impl Blockchain {
         self.longest_hash.clone()
     }
 
+    pub fn difficulty(&self) -> H256 {
+        self.blocks.get(&self.longest_hash)
+            .unwrap().header.difficulty.clone()
+    }
+
     // include genesis block
     pub fn length(&self) -> usize {
         self.max_index + 1
@@ -111,6 +119,7 @@ mod tests {
         let block = generate_random_block(&genesis_hash);
         blockchain.insert(&block);
         assert_eq!(blockchain.tip(), block.hash());
+        assert_eq!(blockchain.difficulty(), block.header.difficulty);
     }
 
     #[test]

@@ -17,7 +17,7 @@ pub struct Header {
     pub parent: H256,
     pub nonce: u32,
     pub difficulty: H256,
-    timestamp: usize,
+    timestamp: u128,
     merkle_root: H256,
 }
 
@@ -32,7 +32,7 @@ impl Hashable for Block {
     }
 }
 
-static DIFFICULTY: usize = 4; // number of leading zero
+static DIFFICULTY: usize = 1; // number of leading zero
 
 impl Block {
     pub fn genesis() -> Self {
@@ -76,7 +76,7 @@ impl Block {
 }
 
 impl Header {
-    pub fn new( parent: &H256, nonce: u32, timestamp: usize,
+    pub fn new( parent: &H256, nonce: u32, timestamp: u128,
                  difficulty: &H256, merkle_root: &H256) -> Self {
         Self {
             parent: parent.clone(),
@@ -96,12 +96,22 @@ impl Header {
         ctx.update(self.merkle_root.as_ref());
         ctx.finish().into()
     }
+
+    pub fn change_nonce(&mut self) {
+        self.nonce = self.nonce.overflowing_add(1).0;
+    }
 }
 
 impl Content {
     pub fn new() -> Self {
         Self {
             trans: Vec::<Transaction>::new(),
+        }
+    }
+
+    pub fn new_with_trans(trans: &Vec<Transaction>) -> Self {
+        Self {
+            trans: trans.clone(),
         }
     }
 
@@ -133,7 +143,7 @@ pub mod test {
     pub fn generate_random_header(parent: &H256, content: &Content) -> Header {
         let mut rng = rand::thread_rng();
         let nonce: u32 = rng.gen();
-        let timestamp: usize = rng.gen();
+        let timestamp: u128 = rng.gen();
         let difficulty = generate_random_hash();
         let merkle_root = content.merkle_root();
         Header::new(
@@ -163,5 +173,14 @@ pub mod test {
         assert_eq!(0, array[0]);
         assert_eq!(0, array[DIFFICULTY-1]);
         assert_eq!(255, array[DIFFICULTY]);
+    }
+
+    #[test]
+    fn test_content_new_with_trans() {
+        let mut trans = Vec::<Transaction>::new();
+        for _ in 0..3 {
+            trans.push(generate_random_transaction());
+        }
+        let _content = Content::new_with_trans(&trans);
     }
 }
