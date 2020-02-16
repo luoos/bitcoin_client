@@ -7,7 +7,7 @@ use crate::crypto::hash::{Hashable, H256};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
-    msg: String,
+    pub msg: String,
 }
 
 impl Hashable for Transaction {

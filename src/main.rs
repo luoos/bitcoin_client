@@ -18,7 +18,10 @@ use network::{server, worker};
 use std::net;
 use std::process;
 use std::thread;
+use std::sync::{Arc, Mutex};
 use std::time;
+
+use crate::blockchain::Blockchain;
 
 fn main() {
     // parse command line arguments
@@ -80,9 +83,13 @@ fn main() {
     );
     worker_ctx.start();
 
+    // create blockchain
+    let blockchain = Arc::new(Mutex::new(Blockchain::new()));
+
     // start the miner
     let (miner_ctx, miner) = miner::new(
         &server,
+        &blockchain,
     );
     miner_ctx.start();
 

@@ -15,9 +15,9 @@ pub struct Block {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Header {
     pub parent: H256,
-    nonce: u32,
-    difficulty: H256,
-    timestamp: usize,
+    pub nonce: u32,
+    pub difficulty: H256,
+    timestamp: u128,
     merkle_root: H256,
 }
 
@@ -32,13 +32,19 @@ impl Hashable for Block {
     }
 }
 
+static DIFFICULTY: usize = 1; // number of leading zero
+
 impl Block {
     pub fn genesis() -> Self {
         let h: [u8; 32] = [0; 32];
+        let mut difficulty: [u8; 32] = [std::u8::MAX; 32];
+        for i in 0..DIFFICULTY {
+            difficulty[i] = 0;
+        }
         let header = Header {
             parent: h.into(),
             nonce: 0,
-            difficulty: h.into(),
+            difficulty: difficulty.into(),
             timestamp: 0,
             merkle_root: h.into(),
         };
@@ -70,7 +76,7 @@ impl Block {
 }
 
 impl Header {
-    pub fn new( parent: &H256, nonce: u32, timestamp: usize,
+    pub fn new( parent: &H256, nonce: u32, timestamp: u128,
                  difficulty: &H256, merkle_root: &H256) -> Self {
         Self {
             parent: parent.clone(),
@@ -90,12 +96,22 @@ impl Header {
         ctx.update(self.merkle_root.as_ref());
         ctx.finish().into()
     }
+
+    pub fn change_nonce(&mut self) {
+        self.nonce = self.nonce.overflowing_add(1).0;
+    }
 }
 
 impl Content {
     pub fn new() -> Self {
         Self {
             trans: Vec::<Transaction>::new(),
+        }
+    }
+
+    pub fn new_with_trans(trans: &Vec<Transaction>) -> Self {
+        Self {
+            trans: trans.clone(),
         }
     }
 
@@ -127,7 +143,7 @@ pub mod test {
     pub fn generate_random_header(parent: &H256, content: &Content) -> Header {
         let mut rng = rand::thread_rng();
         let nonce: u32 = rng.gen();
-        let timestamp: usize = rng.gen();
+        let timestamp: u128 = rng.gen();
         let difficulty = generate_random_hash();
         let merkle_root = content.merkle_root();
         Header::new(
@@ -151,5 +167,20 @@ pub mod test {
         let g = Block::genesis();
         assert_eq!(0, g.index);
         assert_eq!(g.hash, H256::from([0u8; 32]));
+        let array: [u8; 32] = g.header.difficulty.into();
+        assert!(DIFFICULTY > 0);
+        assert!(DIFFICULTY < 32);
+        assert_eq!(0, array[0]);
+        assert_eq!(0, array[DIFFICULTY-1]);
+        assert_eq!(255, array[DIFFICULTY]);
+    }
+
+    #[test]
+    fn test_content_new_with_trans() {
+        let mut trans = Vec::<Transaction>::new();
+        for _ in 0..3 {
+            trans.push(generate_random_transaction());
+        }
+        let _content = Content::new_with_trans(&trans);
     }
 }

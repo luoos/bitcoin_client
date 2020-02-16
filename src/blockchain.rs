@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use log::info;
 
 use crate::block::Block;
 use crate::crypto::hash::H256;
@@ -7,6 +8,7 @@ pub struct Blockchain {
     blocks: HashMap<H256, Block>,
     orphans: HashMap<H256, Vec<Block>>, // key is the hash of the parent
     longest_hash: H256,
+    max_index: usize,
 }
 
 impl Blockchain {
@@ -20,7 +22,8 @@ impl Blockchain {
         Self {
             blocks: map,
             orphans: orphans,
-            longest_hash: longest_hash
+            longest_hash: longest_hash,
+            max_index: 0,
         }
     }
 
@@ -28,6 +31,8 @@ impl Blockchain {
     pub fn insert(&mut self, block: &Block) {
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
+        info!("insert block: {:?}, nonce: {}, parent: {:?}",
+                &b.hash, b.header.nonce, parent_hash);
         match self.blocks.get(parent_hash) {
             Some(prev_block) => {
                 let cur_index = prev_block.index + 1;
@@ -35,6 +40,7 @@ impl Blockchain {
                 let longest_block = self.blocks.get(&self.longest_hash).unwrap();
                 if cur_index > longest_block.index {
                     self.longest_hash = b.hash.clone();
+                    self.max_index = cur_index;
                 }
                 let new_parent_hash = b.hash.clone();
                 self.blocks.insert(b.hash.clone(), b);
@@ -72,6 +78,16 @@ impl Blockchain {
         self.longest_hash.clone()
     }
 
+    pub fn difficulty(&self) -> H256 {
+        self.blocks.get(&self.longest_hash)
+            .unwrap().header.difficulty.clone()
+    }
+
+    // include genesis block
+    pub fn length(&self) -> usize {
+        self.max_index + 1
+    }
+
     /// Get the last block's hash of the longest chain
     #[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
@@ -103,6 +119,7 @@ mod tests {
         let block = generate_random_block(&genesis_hash);
         blockchain.insert(&block);
         assert_eq!(blockchain.tip(), block.hash());
+        assert_eq!(blockchain.difficulty(), block.header.difficulty);
     }
 
     #[test]
@@ -138,6 +155,7 @@ mod tests {
     fn handle_orphan() {
         let mut blockchain = Blockchain::new();
         let genesis_hash = blockchain.tip();
+        assert_eq!(1, blockchain.length());
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash());
         let block3 = generate_random_block(&block2.hash());
@@ -145,6 +163,7 @@ mod tests {
         blockchain.insert(&block2);
         blockchain.insert(&block1);
         assert_eq!(blockchain.tip(), block3.hash());
+        assert_eq!(4, blockchain.length());
 
         // naming rule: block_<branch>_<index>
         let mut blockchain = Blockchain::new();
@@ -165,6 +184,7 @@ mod tests {
         assert_eq!(blockchain.tip(), genesis_hash);
         blockchain.insert(&block_1_1);
         assert_eq!(blockchain.tip(), block_2_5.hash());
+        assert_eq!(6, blockchain.length());
     }
 
     #[test]
