@@ -153,10 +153,17 @@ impl Context {
             let mut i: u32 = 0;
             while i < MINE_STEP {
                 if header.hash() < difficulty {
+                    // insert block into chain
                     let block = Block::new(header, content);
                     let mut blockchain = self.blockchain.lock().unwrap();
                     blockchain.insert(&block);
                     drop(blockchain);
+
+                    // clear transactions
+                    let mut trans = self.trans.lock().unwrap();
+                    trans.clear();
+                    drop(trans);
+
                     break;
                 }
                 header.change_nonce();
