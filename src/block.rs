@@ -32,7 +32,7 @@ impl Hashable for Block {
     }
 }
 
-static DIFFICULTY: usize = 12; // number of leading zero
+static DIFFICULTY: i32 = 12; // number of leading zero
 
 impl Block {
     pub fn genesis() -> Self {
@@ -124,6 +124,22 @@ impl Content {
     }
 }
 
+fn set_difficulty(mut zero_cnt: i32) -> [u8; 32] {
+    let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
+
+    for i in 0..32 {
+        if zero_cnt <= 0 {break}
+
+        if zero_cnt < 8 {
+            difficulty[i] = 0xffu8 >> zero_cnt;
+        } else {
+            difficulty[i] = 0u8;
+        }
+        zero_cnt -= 8;
+    }
+    difficulty
+}
+
 #[cfg(any(test, test_utilities))]
 pub mod test {
     use super::*;
@@ -192,6 +208,11 @@ pub mod test {
         assert_eq!(255, test_array1[1]);
         assert_eq!(255, test_array1[31]);
 
+        let test_array1 = set_difficulty(9);
+        assert_eq!(0, test_array1[0]);
+        assert_eq!(0x7f, test_array1[1]);
+        assert_eq!(255, test_array1[31]);
+
         let test_array2 = set_difficulty(10);
         assert_eq!(0, test_array2[0]);
         assert_eq!(63, test_array2[1]);
@@ -210,19 +231,3 @@ pub mod test {
 
     }
 }
-
-fn set_difficulty(dif_val : usize) -> [u8; 32] {
-    let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
-    let mut cnt = 0;
-
-    for i in 0..32 {
-        for _j in 0..8 {
-            if cnt < dif_val {
-                difficulty[i] = difficulty[i] >> 1;
-            }
-            cnt += 1;
-        }
-    }
-    difficulty
-}
-
