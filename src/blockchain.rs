@@ -31,8 +31,7 @@ impl Blockchain {
     pub fn insert(&mut self, block: &Block) {
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
-        info!("insert block: {:?}, nonce: {}, parent: {:?}",
-                &b.hash, b.header.nonce, parent_hash);
+
         match self.blocks.get(parent_hash) {
             Some(prev_block) => {
                 let cur_index = prev_block.index + 1;
@@ -43,6 +42,9 @@ impl Blockchain {
                     self.max_index = cur_index;
                 }
                 let new_parent_hash = b.hash.clone();
+                info!("insert block with height {:?}: {:?}, nonce: {}, parent: {:?}",
+                      &b.index, &b.hash, b.header.nonce, parent_hash);
+
                 self.blocks.insert(b.hash.clone(), b);
                 self.handle_orphan(&new_parent_hash);
             },

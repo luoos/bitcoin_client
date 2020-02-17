@@ -32,15 +32,13 @@ impl Hashable for Block {
     }
 }
 
-static DIFFICULTY: usize = 1; // number of leading zero
+static DIFFICULTY: usize = 12; // number of leading zero
 
 impl Block {
     pub fn genesis() -> Self {
         let h: [u8; 32] = [0; 32];
-        let mut difficulty: [u8; 32] = [std::u8::MAX; 32];
-        for i in 0..DIFFICULTY {
-            difficulty[i] = 0;
-        }
+        let difficulty: [u8; 32] = set_difficulty(DIFFICULTY);
+
         let header = Header {
             parent: h.into(),
             nonce: 0,
@@ -73,11 +71,12 @@ impl Block {
     pub fn get_hash(&self) -> H256 {
         self.hash.clone()
     }
+
 }
 
 impl Header {
     pub fn new( parent: &H256, nonce: u32, timestamp: u128,
-                 difficulty: &H256, merkle_root: &H256) -> Self {
+                difficulty: &H256, merkle_root: &H256) -> Self {
         Self {
             parent: parent.clone(),
             nonce: nonce,
@@ -169,10 +168,12 @@ pub mod test {
         assert_eq!(g.hash, H256::from([0u8; 32]));
         let array: [u8; 32] = g.header.difficulty.into();
         assert!(DIFFICULTY > 0);
-        assert!(DIFFICULTY < 32);
+        assert!(DIFFICULTY < 256);
         assert_eq!(0, array[0]);
-        assert_eq!(0, array[DIFFICULTY-1]);
-        assert_eq!(255, array[DIFFICULTY]);
+        assert_eq!(15, array[1]);
+        assert_eq!(255, array[2]);
+        assert_eq!(255, array[30]);
+        assert_eq!(255, array[31]);
     }
 
     #[test]
@@ -183,4 +184,45 @@ pub mod test {
         }
         let _content = Content::new_with_trans(&trans);
     }
+
+    #[test]
+    fn test_difficulty() {
+        let test_array1 = set_difficulty(8);
+        assert_eq!(0, test_array1[0]);
+        assert_eq!(255, test_array1[1]);
+        assert_eq!(255, test_array1[31]);
+
+        let test_array2 = set_difficulty(10);
+        assert_eq!(0, test_array2[0]);
+        assert_eq!(63, test_array2[1]);
+        assert_eq!(255, test_array2[2]);
+
+        let test_array3 = set_difficulty(15);
+        assert_eq!(0, test_array3[0]);
+        assert_eq!(1, test_array3[1]);
+        assert_eq!(0, test_array3[0]);
+        assert_eq!(255, test_array1[31]);
+
+        let test_array4 = set_difficulty(21);
+        assert_eq!(0, test_array4[0]);
+        assert_eq!(0, test_array4[1]);
+        assert_eq!(7, test_array4[2]);
+
+    }
 }
+
+fn set_difficulty(dif_val : usize) -> [u8; 32] {
+    let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
+    let mut cnt = 0;
+
+    for i in 0..32 {
+        for _j in 0..8 {
+            if cnt < dif_val {
+                difficulty[i] = difficulty[i] >> 1;
+            }
+            cnt += 1;
+        }
+    }
+    difficulty
+}
+
