@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use log::info;
 
 use crate::block::Block;
@@ -7,6 +7,7 @@ use crate::crypto::hash::H256;
 pub struct Blockchain {
     blocks: HashMap<H256, Block>,
     orphans: HashMap<H256, Vec<Block>>, // key is the hash of the parent
+    orphans_hash: HashSet<H256>,  // hash of orphans
     longest_hash: H256,
     max_index: usize,
 }
@@ -22,6 +23,7 @@ impl Blockchain {
         Self {
             blocks: map,
             orphans: orphans,
+            orphans_hash: HashSet::new(),
             longest_hash: longest_hash,
             max_index: 0,
         }
@@ -49,6 +51,7 @@ impl Blockchain {
                 self.handle_orphan(&new_parent_hash);
             },
             None => {
+                self.orphans_hash.insert(b.hash.clone());
                 match self.orphans.get_mut(parent_hash) {
                     Some(children_vec) => {
                         children_vec.push(b);
@@ -67,6 +70,7 @@ impl Blockchain {
     fn handle_orphan(&mut self, new_parent: &H256) {
         if let Some(children_vec) = self.orphans.remove(new_parent) {
             for child in children_vec.iter() {
+                self.orphans_hash.remove(&child.hash);
                 self.insert(child);
             }
         }
@@ -85,6 +89,12 @@ impl Blockchain {
     // include genesis block
     pub fn length(&self) -> usize {
         self.max_index + 1
+    }
+
+    // check existence, including orphans
+    pub fn exist(&self, hash: &H256) -> bool {
+        self.blocks.contains_key(hash)
+            || self.orphans_hash.contains(hash)
     }
 
     /// Get the last block's hash of the longest chain
@@ -200,5 +210,21 @@ mod tests {
         let chain_hash = blockchain.all_blocks_in_longest_chain();
         assert_eq!(chain_hash[0], block3.hash);
         assert_eq!(chain_hash.last().unwrap(), &genesis_hash);
+    }
+
+    #[test]
+    fn test_exist() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        assert!(blockchain.exist(&genesis_hash));
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash());
+        let block3 = generate_random_block(&block2.hash());
+        assert!(!blockchain.exist(&block3.hash));
+        blockchain.insert(&block3);
+        assert!(blockchain.exist(&block3.hash));
+        assert!(!blockchain.exist(&block1.hash));
+        blockchain.insert(&block1);
+        assert!(blockchain.exist(&block1.hash));
     }
 }
