@@ -65,13 +65,10 @@ impl Blockchain {
     }
 
     fn handle_orphan(&mut self, new_parent: &H256) {
-        match self.orphans.remove(new_parent) {
-            Some(children_vec) => {
-                for child in children_vec.iter() {
-                    self.insert(child);
-                }
-            },
-            None => {}
+        if let Some(children_vec) = self.orphans.remove(new_parent) {
+            for child in children_vec.iter() {
+                self.insert(child);
+            }
         }
     }
 
