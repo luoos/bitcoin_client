@@ -15,6 +15,7 @@ use crate::blockchain::Blockchain;
 use crate::transaction::Transaction;
 use crate::block::{Content, Header, Block};
 use crate::crypto::hash::H256;
+use crate::network::message::{Message};
 
 static MINE_STEP: u32 = 1024;
 static DEMO_TRANS: usize = 4;
@@ -145,6 +146,23 @@ impl Context {
         }
     }
 
+    fn found(&mut self, block: Block) {
+        info!("Found block: {:?}", block);
+        // insert block into chain
+        let mut blockchain = self.blockchain.lock().unwrap();
+        blockchain.insert(&block);
+        drop(blockchain);
+
+        // clear transactions
+        let mut trans = self.trans.lock().unwrap();
+        trans.clear();
+        drop(trans);
+
+        // broadcast new block
+        let vec = vec![block.hash.clone()];
+        self.server.broadcast(Message::NewBlockHashes(vec));
+    }
+
     fn mining(&mut self) -> bool {
         let blockchain = self.blockchain.lock().unwrap();
         let tip = blockchain.tip();  // previous hash
@@ -171,17 +189,8 @@ impl Context {
         let mut i: u32 = 0;
         while i < MINE_STEP {
             if header.hash() < difficulty {
-                // insert block into chain
                 let block = Block::new(header, content);
-                let mut blockchain = self.blockchain.lock().unwrap();
-                blockchain.insert(&block);
-                drop(blockchain);
-
-                // clear transactions
-                let mut trans = self.trans.lock().unwrap();
-                trans.clear();
-                drop(trans);
-
+                self.found(block);
                 bingo = true;
                 break;
             }
@@ -217,26 +226,16 @@ pub fn generate_random_transaction() -> Transaction {
 
 #[cfg(any(test, test_utilities))]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::sync::{Arc, Mutex};
-    use crossbeam::channel;
 
-    use crate::network::server;
     use crate::blockchain::Blockchain;
-    use crate::network::server::Handle as ServerHandle;
+    use crate::network::server::tests::fake_server_handle;
     use crate::miner;
     use crate::crypto::hash::H256;
 
-    fn gen_fake_server_handle() -> ServerHandle {
-        let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6001);
-        let (msg_tx, _) = channel::unbounded();
-        let (_, server) = server::new(socket_addr, msg_tx).unwrap();
-        server
-    }
-
-    #[test]
+    // #[test]
     fn test_miner() {
-        let server_handle = gen_fake_server_handle();
+        let server_handle = fake_server_handle();
         let blockchain = Arc::new(Mutex::new(Blockchain::new()));
         let mut miner = miner::new(&server_handle, &blockchain).0;
         let mut difficulty: H256 = H256::from([255u8; 32]);

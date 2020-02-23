@@ -398,3 +398,17 @@ struct ConnectRequest {
     addr: std::net::SocketAddr,
     result_chan: cbchannel::Sender<std::io::Result<peer::Handle>>,
 }
+
+#[cfg(any(test, test_utilities))]
+pub mod tests {
+    use mio_extras::channel;
+
+    use super::Handle;
+
+    pub fn fake_server_handle() -> Handle {
+        let (control_signal_sender, _) = channel::channel();
+        Handle {
+            control_chan: control_signal_sender,
+        }
+    }
+}

@@ -13,7 +13,7 @@ pub struct Blockchain {
 }
 
 impl Blockchain {
-    /// Create a new blockchain, only containing the genesis block
+    // Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
         let genesis = Block::genesis();
         let longest_hash = genesis.get_hash();
@@ -29,8 +29,11 @@ impl Blockchain {
         }
     }
 
-    /// Insert a block into blockchain
-    pub fn insert(&mut self, block: &Block) {
+    // Insert a block into blockchain
+    pub fn insert(&mut self, block: &Block) -> bool {
+        if self.exist(&block.hash) {
+            return false;
+        }
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
 
@@ -44,7 +47,7 @@ impl Blockchain {
                     self.max_index = cur_index;
                 }
                 let new_parent_hash = b.hash.clone();
-                info!("insert block with height {:?}: {:?}, nonce: {}, parent: {:?}",
+                info!("insert block with index {:?}: {:?}, nonce: {}, parent: {:?}",
                       &b.index, &b.hash, b.header.nonce, parent_hash);
 
                 self.blocks.insert(b.hash.clone(), b);
@@ -65,6 +68,7 @@ impl Blockchain {
                 }
             }
         }
+        return true;
     }
 
     fn handle_orphan(&mut self, new_parent: &H256) {
@@ -76,7 +80,7 @@ impl Blockchain {
         }
     }
 
-    /// Get the last block's hash of the longest chain
+    // Get the last block's hash of the longest chain
     pub fn tip(&self) -> H256 {
         self.longest_hash.clone()
     }
@@ -97,7 +101,17 @@ impl Blockchain {
             || self.orphans_hash.contains(hash)
     }
 
-    /// Get the last block's hash of the longest chain
+    pub fn get_blocks(&self, hashes: &Vec<H256>) -> Vec<Block> {
+        let mut blocks = Vec::<Block>::new();
+        for h in hashes.iter() {
+            if let Some(b) = self.blocks.get(&h) {
+                blocks.push(b.clone());
+            }
+        }
+        blocks
+    }
+
+    // Get the last block's hash of the longest chain
     #[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
         let mut cur_hash = self.tip();
@@ -126,9 +140,10 @@ mod tests {
         let genesis_hash = blockchain.tip();
         assert_eq!(&genesis_hash, &H256::from([0u8; 32]));
         let block = generate_random_block(&genesis_hash);
-        blockchain.insert(&block);
+        assert!(blockchain.insert(&block));
         assert_eq!(blockchain.tip(), block.hash());
         assert_eq!(blockchain.difficulty(), block.header.difficulty);
+        assert!(!blockchain.insert(&block));
     }
 
     #[test]
@@ -226,5 +241,21 @@ mod tests {
         assert!(!blockchain.exist(&block1.hash));
         blockchain.insert(&block1);
         assert!(blockchain.exist(&block1.hash));
+    }
+
+    #[test]
+    fn test_get_blocks() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash);
+        let block3 = generate_random_block(&block2.hash);
+        blockchain.insert(&block1);
+        blockchain.insert(&block2);
+        let hashes = vec![block1.hash(), block2.hash(), block3.hash()];
+        let blocks = blockchain.get_blocks(&hashes);
+        assert_eq!(2, blocks.len());
+        assert_eq!(&block1.hash, &blocks[0].hash);
+        assert_eq!(&block2.hash, &blocks[1].hash);
     }
 }
