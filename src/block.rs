@@ -32,6 +32,14 @@ impl Hashable for Block {
     }
 }
 
+impl PartialEq<Block> for Block {
+    fn eq(&self, other: &Block) -> bool {
+        let self_serialized_array = bincode::serialize(&self).unwrap();
+        let other_serialized_array = bincode::serialize(other).unwrap();
+        self_serialized_array == other_serialized_array
+    }
+}
+
 static DIFFICULTY: i32 = 12; // number of leading zero
 
 impl Block {
@@ -228,6 +236,31 @@ pub mod test {
         assert_eq!(0, test_array4[0]);
         assert_eq!(0, test_array4[1]);
         assert_eq!(7, test_array4[2]);
+    }
 
+    #[test]
+    fn test_block_equality() {
+        let rand_1: [u8; 32] = [0; 32];
+        let rand_2: [u8; 32] = [1; 32];
+
+        let content_1 = generate_random_content();
+        let content_2 = generate_random_content();
+        let header_1 = generate_random_header(&rand_1.into(), &content_1);
+        let header_2 = generate_random_header(&rand_1.into(), &content_2);
+        let header_3 = generate_random_header(&rand_2.into(), &content_1);
+
+        let block_1 = Block::new(header_1.clone(), content_1.clone());
+        let block_2 = Block::new(header_2.clone(), content_1.clone());
+        let block_3 = Block::new(header_3.clone(), content_1.clone());
+        let block_4 = Block::new(header_1.clone(), content_2.clone());
+        let block_5 = Block::new(header_1.clone(), content_1.clone());
+
+        // different header
+        assert_ne!(block_1, block_2);
+        assert_ne!(block_1, block_3);
+        // different content
+        assert_ne!(block_1, block_4);
+        // same
+        assert_eq!(block_1, block_5);
     }
 }

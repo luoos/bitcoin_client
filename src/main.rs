@@ -129,7 +129,6 @@ fn main() {
         });
     }
 
-
     // start the API server
     ApiServer::start(
         api_addr,

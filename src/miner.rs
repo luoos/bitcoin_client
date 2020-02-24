@@ -40,6 +40,7 @@ pub struct Context {
     trans: Arc<Mutex<Vec<Transaction>>>,
     pub nonce: u32,
     difficulty: H256,  // assume constant difficulty
+    pub mined_num: usize,
 }
 
 #[derive(Clone)]
@@ -64,6 +65,7 @@ pub fn new(
         trans: trans,
         nonce: 0,
         difficulty: difficulty,
+        mined_num: 0,
     };
 
     let handle = Handle {
@@ -158,6 +160,9 @@ impl Context {
         trans.clear();
         drop(trans);
 
+        // add new mined block into total count
+        self.mined_num += 1;
+
         // broadcast new block
         let vec = vec![block.hash.clone()];
         self.server.broadcast(Message::NewBlockHashes(vec));
@@ -226,18 +231,23 @@ pub fn generate_random_transaction() -> Transaction {
 
 #[cfg(any(test, test_utilities))]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
     use crate::blockchain::Blockchain;
-    use crate::network::server::tests::fake_server_handle;
     use crate::miner;
     use crate::crypto::hash::H256;
+    use crate::network::{worker, server};
+    use crate::block::test::generate_random_block;
 
-    // #[test]
+    use log::{error, info};
+    use std::sync::{Arc, Mutex};
+    use std::time;
+    use std::thread;
+    use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+    use crossbeam::channel;
+
+    #[test]
     fn test_miner() {
-        let server_handle = fake_server_handle();
-        let blockchain = Arc::new(Mutex::new(Blockchain::new()));
-        let mut miner = miner::new(&server_handle, &blockchain).0;
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7011);
+        let (_server_handle, mut miner, _blockchain) = new_server_env(p2p_addr_1);
         let mut difficulty: H256 = H256::from([255u8; 32]);
         miner.change_difficulty(&difficulty);
         assert_eq!(0, miner.nonce);
@@ -254,5 +264,106 @@ mod tests {
         assert!(miner.mining());
         assert_eq!(miner::MINE_STEP, miner.nonce);
         assert_eq!(0, miner.trans_len());
+    }
+
+    #[test]
+    fn test_block_relay() {
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7011);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7012);
+        let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7013);
+
+        let (_server_1, mut miner_ctx_1, blockchain_1) = new_server_env(p2p_addr_1);
+        let (server_2, mut miner_ctx_2, blockchain_2) = new_server_env(p2p_addr_2);
+        let (server_3, mut miner_ctx_3, blockchain_3) = new_server_env(p2p_addr_3);
+
+        // bilateral connection!!
+        let peers_2 = vec![p2p_addr_1];
+        connect_peers(&server_2, peers_2.clone());
+        let peers_3 = vec![p2p_addr_2];
+        connect_peers(&server_3, peers_3.clone());
+
+        let chain_1 = blockchain_1.lock().unwrap();
+        let new_block_1 = generate_random_block(&chain_1.tip());
+        drop(chain_1);
+        miner_ctx_1.found(new_block_1);
+        thread::sleep(time::Duration::from_millis(500));
+
+        let chain_1 = blockchain_1.lock().unwrap();
+        let chain_2 = blockchain_2.lock().unwrap();
+        let chain_3 = blockchain_3.lock().unwrap();
+        assert!(chain_1.length() == 2);
+        assert_eq!(chain_1.length(), chain_2.length());
+        assert_eq!(chain_1.length(), chain_3.length());
+        assert_eq!(chain_1.get_block(&chain_1.tip()), chain_2.get_block(&chain_2.tip()));
+        assert_eq!(chain_1.get_block(&chain_1.tip()), chain_3.get_block(&chain_3.tip()));
+        drop(chain_1);
+        drop(chain_2);
+        drop(chain_3);
+
+        let chain_2 = blockchain_1.lock().unwrap();
+        let new_block_2 = generate_random_block(&chain_2.tip());
+        miner_ctx_2.found(new_block_2);
+        drop(chain_2);
+        thread::sleep(time::Duration::from_millis(500));
+
+        let chain_1 = blockchain_1.lock().unwrap();
+        let chain_2 = blockchain_2.lock().unwrap();
+        let chain_3 = blockchain_3.lock().unwrap();
+        assert!(chain_1.length() == 3);
+        assert_eq!(chain_1.length(), chain_2.length());
+        assert_eq!(chain_1.length(), chain_3.length());
+        assert_eq!(chain_1.get_block(&chain_1.tip()), chain_2.get_block(&chain_2.tip()));
+        assert_eq!(chain_1.get_block(&chain_1.tip()), chain_3.get_block(&chain_3.tip()));
+        drop(chain_1);
+        drop(chain_2);
+        drop(chain_3);
+
+        let chain_3 = blockchain_1.lock().unwrap();
+        let new_block_3 = generate_random_block(&chain_3.tip());
+        miner_ctx_3.found(new_block_3);
+        drop(chain_3);
+        thread::sleep(time::Duration::from_millis(500));
+
+        let chain_1 = blockchain_1.lock().unwrap();
+        let chain_2 = blockchain_2.lock().unwrap();
+        let chain_3 = blockchain_3.lock().unwrap();
+        assert!(chain_1.length() == 4);
+        assert_eq!(chain_1.length(), chain_2.length());
+        assert_eq!(chain_1.length(), chain_3.length());
+        assert_eq!(chain_1.get_block(&chain_1.tip()), chain_2.get_block(&chain_2.tip()));
+        assert_eq!(chain_1.get_block(&chain_1.tip()), chain_3.get_block(&chain_3.tip()));
+
+        let total_mined_num : usize = miner_ctx_1.mined_num + miner_ctx_2.mined_num + miner_ctx_3.mined_num;
+        assert_eq!(chain_1.length(), total_mined_num + 1);
+    }
+
+    fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context, Arc<Mutex<Blockchain>>) {
+        let (sender, receiver) = channel::unbounded();
+        let (server_ctx, server) = server::new(ipv4_addr, sender).unwrap();
+        server_ctx.start().unwrap();
+
+        let blockchain =  Arc::new(Mutex::new(Blockchain::new()));
+        let worker_ctx = worker::new(4, receiver, &server, &blockchain);
+        worker_ctx.start();
+
+        let (miner_ctx, _miner) = miner::new(&server, &blockchain);
+
+        (server, miner_ctx, blockchain)
+    }
+
+    fn connect_peers(server: &server::Handle, known_peers: Vec<SocketAddr>) {
+        for peer_addr in known_peers {
+            match server.connect(peer_addr) {
+                Ok(_) => {
+                    info!("Connected to outgoing peer {}", &peer_addr);
+                }
+                Err(e) => {
+                    error!(
+                        "Error connecting to peer {}, retrying in one second: {}",
+                        peer_addr, e
+                    );
+                }
+            }
+        }
     }
 }

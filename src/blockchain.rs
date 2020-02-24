@@ -111,6 +111,10 @@ impl Blockchain {
         blocks
     }
 
+    pub fn get_block(&self, hash: &H256) -> Block {
+        self.blocks.get(hash).unwrap().clone()
+    }
+
     // Get the last block's hash of the longest chain
     #[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
