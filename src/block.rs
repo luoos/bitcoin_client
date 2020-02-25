@@ -1,5 +1,9 @@
+use hex;
 use ring::digest;
 use serde::{Serialize, Deserialize};
+use chrono::prelude::DateTime;
+use chrono::Utc;
+use std::time::{UNIX_EPOCH, Duration};
 use crate::crypto::hash::{H256, Hashable};
 use crate::transaction::Transaction;
 use crate::crypto::merkle::MerkleTree;
@@ -12,12 +16,23 @@ pub struct Block {
     content: Content,   // transaction in this block
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PrintableBlock {
+    pub hash: String,
+    pub parent_hash: String,
+    pub index: usize,
+    pub nonce: u32,
+    pub difficulty: String,
+    pub timestamp: String,
+    pub merkle_root: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Header {
     pub parent: H256,
     pub nonce: u32,
     pub difficulty: H256,
-    timestamp: u128,
+    timestamp: u64,
     merkle_root: H256,
 }
 
@@ -82,6 +97,28 @@ impl Block {
 
 }
 
+impl PrintableBlock {
+    pub fn from_block_vec(blocks: &Vec<Block>) -> Vec<PrintableBlock> {
+        let mut pblocks = Vec::<PrintableBlock>::new();
+        for b in blocks {
+            let t = UNIX_EPOCH + Duration::from_millis(b.header.timestamp);
+            let datetime = DateTime::<Utc>::from(t);
+            let ts_str = datetime.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+            let p = PrintableBlock {
+                hash: hex::encode(&b.hash),
+                parent_hash: hex::encode(&b.header.parent),
+                index: b.index,
+                nonce: b.header.nonce,
+                difficulty: hex::encode(&b.header.difficulty),
+                timestamp: ts_str,
+                merkle_root: hex::encode(&b.header.merkle_root),
+            };
+            pblocks.push(p);
+        }
+        pblocks
+    }
+}
+
 impl Header {
     pub fn new( parent: &H256, nonce: u32, timestamp: u128,
                 difficulty: &H256, merkle_root: &H256) -> Self {
@@ -89,7 +126,7 @@ impl Header {
             parent: parent.clone(),
             nonce: nonce,
             difficulty: difficulty.clone(),
-            timestamp: timestamp,
+            timestamp: timestamp as u64,
             merkle_root: merkle_root.clone(),
         }
     }

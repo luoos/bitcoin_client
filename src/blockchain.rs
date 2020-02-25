@@ -126,7 +126,6 @@ impl Blockchain {
             cur_block = self.blocks.get(&cur_hash).unwrap();
             index -= 1;
         }
-        result.reverse();
         result
     }
 
@@ -305,10 +304,10 @@ mod tests {
         blockchain.insert(&block2);
         blockchain.insert(&block3);
         let hashes = blockchain.hash_chain();
-        assert_eq!(genesis_hash, hashes[0]);
-        assert_eq!(block1.hash, hashes[1]);
-        assert_eq!(block2.hash, hashes[2]);
-        assert_eq!(block3.hash, hashes[3]);
+        assert_eq!(genesis_hash, hashes[3]);
+        assert_eq!(block1.hash, hashes[2]);
+        assert_eq!(block2.hash, hashes[1]);
+        assert_eq!(block3.hash, hashes[0]);
     }
 
     #[test]
@@ -322,9 +321,9 @@ mod tests {
         blockchain.insert(&block2);
         blockchain.insert(&block3);
         let headers = blockchain.header_chain();
-        assert_eq!(genesis_hash, headers[1].parent);
-        assert_eq!(block1.hash, headers[2].parent);
-        assert_eq!(block2.hash, headers[3].parent);
+        assert_eq!(genesis_hash, headers[2].parent);
+        assert_eq!(block1.hash, headers[1].parent);
+        assert_eq!(block2.hash, headers[0].parent);
     }
 
     #[test]
@@ -338,8 +337,8 @@ mod tests {
         blockchain.insert(&block2);
         blockchain.insert(&block3);
         let blocks = blockchain.block_chain();
-        assert_eq!(block1.hash, blocks[1].hash);
-        assert_eq!(block2.hash, blocks[2].hash);
-        assert_eq!(block3.hash, blocks[3].hash);
+        assert_eq!(block1.hash, blocks[2].hash);
+        assert_eq!(block2.hash, blocks[1].hash);
+        assert_eq!(block3.hash, blocks[0].hash);
     }
 }

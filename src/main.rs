@@ -2,6 +2,9 @@
 #[macro_use]
 extern crate hex_literal;
 
+#[macro_use]
+extern crate lazy_static;
+
 pub mod api;
 pub mod block;
 pub mod blockchain;
@@ -134,6 +137,7 @@ fn main() {
         api_addr,
         &miner,
         &server,
+        &blockchain,
     );
 
     loop {
