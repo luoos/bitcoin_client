@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_miner() {
-        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7011);
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17010);
         let (_server_handle, mut miner, _blockchain) = new_server_env(p2p_addr_1);
         let mut difficulty: H256 = H256::from([255u8; 32]);
         miner.change_difficulty(&difficulty);
@@ -268,9 +268,9 @@ mod tests {
 
     #[test]
     fn test_block_relay() {
-        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7011);
-        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7012);
-        let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 7013);
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17011);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17012);
+        let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17013);
 
         let (_server_1, mut miner_ctx_1, blockchain_1) = new_server_env(p2p_addr_1);
         let (server_2, mut miner_ctx_2, blockchain_2) = new_server_env(p2p_addr_2);
