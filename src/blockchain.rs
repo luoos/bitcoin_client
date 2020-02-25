@@ -47,10 +47,12 @@ impl Blockchain {
                     self.max_index = cur_index;
                 }
                 let new_parent_hash = b.hash.clone();
-                info!("insert block with index {:?}: {:?}, nonce: {}, parent: {:?}",
+                info!("Insert block with index {:?}: {:?}, nonce: {}, parent: {:?}",
                       &b.index, &b.hash, b.header.nonce, parent_hash);
 
                 self.blocks.insert(b.hash.clone(), b);
+                info!("Total number of blocks is {:?}, Length of longest chain is {:?}", self.blocks.len(), self.length());
+
                 self.handle_orphan(&new_parent_hash);
             },
             None => {

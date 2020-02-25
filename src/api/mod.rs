@@ -110,6 +110,14 @@ impl Server {
                             miner.start(lambda);
                             respond_json!(req, true, "ok");
                         }
+                        "/miner/stop" => {
+                            miner.stop();
+                            respond_json!(req, true, "ok");
+                        }
+                        "/miner/pause" => {
+                            miner.pause();
+                            respond_json!(req, true, "ok");
+                        }
                         "/network/ping" => {
                             network.broadcast(Message::Ping(String::from("Test ping")));
                             respond_json!(req, true, "ok");

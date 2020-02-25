@@ -23,6 +23,7 @@ static DEMO_TRANS: usize = 4;
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
     Exit,
+    Paused,
 }
 
 enum OperatingState {
@@ -86,6 +87,17 @@ impl Handle {
             .unwrap();
     }
 
+    pub fn stop(&self) {
+        self.control_chan
+            .send(ControlSignal::Exit)
+            .unwrap()
+    }
+
+    pub fn pause(&self) {
+        self.control_chan
+            .send(ControlSignal::Paused)
+            .unwrap()
+    }
 }
 
 impl Context {
@@ -108,6 +120,10 @@ impl Context {
             ControlSignal::Start(i) => {
                 info!("Miner starting in continuous mode with lambda {}", i);
                 self.operating_state = OperatingState::Run(i);
+            }
+            ControlSignal::Paused => {
+                info!("Miner paused");
+                self.operating_state = OperatingState::Paused;
             }
         }
     }
@@ -162,6 +178,7 @@ impl Context {
 
         // add new mined block into total count
         self.mined_num += 1;
+        info!("Mined {} blocks so far!", self.mined_num);
 
         // broadcast new block
         let vec = vec![block.hash.clone()];
