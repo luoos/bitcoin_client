@@ -138,6 +138,14 @@ impl Blockchain {
         header_chain
     }
 
+    pub fn block_chain(&self) -> Vec<Block> {
+        let hash_chain = self.hash_chain();
+        let block_chain = hash_chain.iter()
+                .map(|h| self.get_block(h).clone())
+                .collect();
+        block_chain
+    }
+
     // Get the last block's hash of the longest chain
     #[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
@@ -317,5 +325,21 @@ mod tests {
         assert_eq!(genesis_hash, headers[1].parent);
         assert_eq!(block1.hash, headers[2].parent);
         assert_eq!(block2.hash, headers[3].parent);
+    }
+
+    #[test]
+    fn test_get_block_chain() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash);
+        let block3 = generate_random_block(&block2.hash);
+        blockchain.insert(&block1);
+        blockchain.insert(&block2);
+        blockchain.insert(&block3);
+        let blocks = blockchain.block_chain();
+        assert_eq!(block1.hash, blocks[1].hash);
+        assert_eq!(block2.hash, blocks[2].hash);
+        assert_eq!(block3.hash, blocks[3].hash);
     }
 }
