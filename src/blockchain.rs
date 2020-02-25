@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use log::info;
 
-use crate::block::Block;
+use crate::block::{Block, Header};
 use crate::crypto::hash::H256;
 
 pub struct Blockchain {
@@ -113,6 +113,29 @@ impl Blockchain {
 
     pub fn get_block(&self, hash: &H256) -> Block {
         self.blocks.get(hash).unwrap().clone()
+    }
+
+    pub fn hash_chain(&self) -> Vec<H256> {
+        let mut cur_hash = self.tip();
+        let mut cur_block = self.blocks.get(&cur_hash).unwrap();
+        let mut index = cur_block.index as i32;
+        let mut result = Vec::<H256>::new();
+        while index >= 0 {
+            result.push(cur_hash);
+            cur_hash = cur_block.header.parent.clone();
+            cur_block = self.blocks.get(&cur_hash).unwrap();
+            index -= 1;
+        }
+        result.reverse();
+        result
+    }
+
+    pub fn header_chain(&self) -> Vec<Header> {
+        let hash_chain = self.hash_chain();
+        let header_chain = hash_chain.iter()
+                .map(|h| self.get_block(h).header.clone())
+                .collect();
+        header_chain
     }
 
     // Get the last block's hash of the longest chain
@@ -261,5 +284,38 @@ mod tests {
         assert_eq!(2, blocks.len());
         assert_eq!(&block1.hash, &blocks[0].hash);
         assert_eq!(&block2.hash, &blocks[1].hash);
+    }
+
+    #[test]
+    fn test_get_hash_chain() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash);
+        let block3 = generate_random_block(&block2.hash);
+        blockchain.insert(&block1);
+        blockchain.insert(&block2);
+        blockchain.insert(&block3);
+        let hashes = blockchain.hash_chain();
+        assert_eq!(genesis_hash, hashes[0]);
+        assert_eq!(block1.hash, hashes[1]);
+        assert_eq!(block2.hash, hashes[2]);
+        assert_eq!(block3.hash, hashes[3]);
+    }
+
+    #[test]
+    fn test_get_header_chain() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash);
+        let block3 = generate_random_block(&block2.hash);
+        blockchain.insert(&block1);
+        blockchain.insert(&block2);
+        blockchain.insert(&block3);
+        let headers = blockchain.header_chain();
+        assert_eq!(genesis_hash, headers[1].parent);
+        assert_eq!(block1.hash, headers[2].parent);
+        assert_eq!(block2.hash, headers[3].parent);
     }
 }
