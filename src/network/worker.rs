@@ -79,13 +79,22 @@ impl Context {
                     debug!("Blocks: {:?}", blocks);
                     let mut blockchain = self.blockchain.lock().unwrap();
                     let mut new_hashes = Vec::<H256>::new();
+                    let mut missing_parents = Vec::<H256>::new();
                     for b in blocks.iter() {
                         if blockchain.insert(b) {
                             new_hashes.push(b.hash.clone());
                         }
+                        if let Some(parent_hash) = blockchain.missing_parent(&b.hash) {
+                            missing_parents.push(parent_hash);
+                        }
                     }
                     drop(blockchain);
-                    self.server.broadcast(Message::NewBlockHashes(new_hashes));
+                    if missing_parents.len() > 0 {
+                        peer.write(Message::GetBlocks(missing_parents));
+                    }
+                    if new_hashes.len() > 0 {
+                        self.server.broadcast(Message::NewBlockHashes(new_hashes));
+                    }
                 }
             }
         }

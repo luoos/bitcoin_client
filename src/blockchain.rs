@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use log::info;
 
 use crate::block::{Block, Header};
@@ -6,8 +6,8 @@ use crate::crypto::hash::H256;
 
 pub struct Blockchain {
     blocks: HashMap<H256, Block>,
-    orphans: HashMap<H256, Vec<Block>>, // key is the hash of the parent
-    orphans_hash: HashSet<H256>,  // hash of orphans
+    orphans_map: HashMap<H256, Vec<Block>>, // key is the hash of the parent
+    orphans: HashMap<H256, Block>,
     longest_hash: H256,
     max_index: usize,
 }
@@ -18,12 +18,12 @@ impl Blockchain {
         let genesis = Block::genesis();
         let longest_hash = genesis.get_hash();
         let mut map: HashMap<H256, Block> = HashMap::new();
-        let orphans: HashMap<H256, Vec<Block>> = HashMap::new();
+        let orphans_map: HashMap<H256, Vec<Block>> = HashMap::new();
         map.insert(genesis.get_hash(), genesis);
         Self {
             blocks: map,
-            orphans: orphans,
-            orphans_hash: HashSet::new(),
+            orphans_map: orphans_map,
+            orphans: HashMap::new(),
             longest_hash: longest_hash,
             max_index: 0,
         }
@@ -56,8 +56,8 @@ impl Blockchain {
                 self.handle_orphan(&new_parent_hash);
             },
             None => {
-                self.orphans_hash.insert(b.hash.clone());
-                match self.orphans.get_mut(parent_hash) {
+                self.orphans.insert(b.hash.clone(), b.clone());
+                match self.orphans_map.get_mut(parent_hash) {
                     Some(children_vec) => {
                         children_vec.push(b);
                     },
@@ -65,7 +65,7 @@ impl Blockchain {
                         let mut children_vec = Vec::<Block>::new();
                         let parent_hash_copy = parent_hash.clone();
                         children_vec.push(b);
-                        self.orphans.insert(parent_hash_copy, children_vec);
+                        self.orphans_map.insert(parent_hash_copy, children_vec);
                     }
                 }
             }
@@ -74,12 +74,27 @@ impl Blockchain {
     }
 
     fn handle_orphan(&mut self, new_parent: &H256) {
-        if let Some(children_vec) = self.orphans.remove(new_parent) {
+        if let Some(children_vec) = self.orphans_map.remove(new_parent) {
             for child in children_vec.iter() {
-                self.orphans_hash.remove(&child.hash);
+                self.orphans.remove(&child.hash);
                 self.insert(child);
             }
         }
+    }
+
+    pub fn is_orphan(&self, hash: &H256) -> bool {
+        self.orphans.contains_key(hash)
+    }
+
+    pub fn missing_parent(&self, orphan_hash: &H256) -> Option<H256> {
+        if !self.is_orphan(orphan_hash) {
+            return None
+        }
+        let mut cur = orphan_hash;
+        while self.orphans.contains_key(&cur) {
+            cur = &self.orphans.get(cur).unwrap().header.parent;
+        }
+        Some(cur.clone())
     }
 
     // Get the last block's hash of the longest chain
@@ -97,16 +112,18 @@ impl Blockchain {
         self.max_index + 1
     }
 
-    // check existence, including orphans
+    // check existence, including orphans_map
     pub fn exist(&self, hash: &H256) -> bool {
         self.blocks.contains_key(hash)
-            || self.orphans_hash.contains(hash)
+            || self.orphans.contains_key(hash)
     }
 
     pub fn get_blocks(&self, hashes: &Vec<H256>) -> Vec<Block> {
         let mut blocks = Vec::<Block>::new();
         for h in hashes.iter() {
             if let Some(b) = self.blocks.get(&h) {
+                blocks.push(b.clone());
+            } else if let Some(b) = self.orphans.get(&h) {
                 blocks.push(b.clone());
             }
         }
@@ -342,5 +359,30 @@ mod tests {
         assert_eq!(block1.hash, blocks[2].hash);
         assert_eq!(block2.hash, blocks[1].hash);
         assert_eq!(block3.hash, blocks[0].hash);
+    }
+
+    #[test]
+    fn test_orphan() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash);
+        let block3 = generate_random_block(&block2.hash);
+        assert!(!blockchain.is_orphan(&block3.hash));
+        assert!(!blockchain.is_orphan(&block1.hash));
+        blockchain.insert(&block2);
+        blockchain.insert(&block3);
+        assert!(blockchain.is_orphan(&block2.hash));
+        assert!(blockchain.is_orphan(&block3.hash));
+        assert!(!blockchain.is_orphan(&block1.hash));
+        assert_eq!(block1.hash, blockchain.missing_parent(&block3.hash).unwrap());
+        assert_eq!(block1.hash, blockchain.missing_parent(&block2.hash).unwrap());
+        blockchain.insert(&block1);
+        assert!(!blockchain.is_orphan(&block3.hash));
+        assert!(!blockchain.is_orphan(&block2.hash));
+        assert!(!blockchain.is_orphan(&block1.hash));
+        assert_eq!(None, blockchain.missing_parent(&block3.hash));
+        assert_eq!(None, blockchain.missing_parent(&block2.hash));
+        assert_eq!(None, blockchain.missing_parent(&block1.hash));
     }
 }
