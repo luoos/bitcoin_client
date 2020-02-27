@@ -385,4 +385,114 @@ mod tests {
         assert_eq!(None, blockchain.missing_parent(&block2.hash));
         assert_eq!(None, blockchain.missing_parent(&block1.hash));
     }
+
+    #[test]
+    fn midtermproject1_insert_one() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block = generate_random_block(&genesis_hash);
+        blockchain.insert(&block);
+        assert_eq!(blockchain.tip(), block.hash());
+    }
+    #[test]
+    fn midtermproject1_insert_3_2() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&block_1);
+        assert_eq!(blockchain.tip(), block_1.hash());
+        let block_2 = generate_random_block(&block_1.hash());
+        blockchain.insert(&block_2);
+        assert_eq!(blockchain.tip(), block_2.hash());
+        let block_3 = generate_random_block(&block_2.hash());
+        blockchain.insert(&block_3);
+        assert_eq!(blockchain.tip(), block_3.hash());
+        let fork_block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&fork_block_1);
+        assert_eq!(blockchain.tip(), block_3.hash());
+        let fork_block_2 = generate_random_block(&fork_block_1.hash());
+        blockchain.insert(&fork_block_2);
+        assert_eq!(blockchain.tip(), block_3.hash());
+    }
+    #[test]
+    fn midtermproject1_insert_2_3() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&block_1);
+        assert_eq!(blockchain.tip(), block_1.hash());
+        let block_2 = generate_random_block(&block_1.hash());
+        blockchain.insert(&block_2);
+        assert_eq!(blockchain.tip(), block_2.hash());
+        let fork_block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&fork_block_1);
+        assert_eq!(blockchain.tip(), block_2.hash());
+        let fork_block_2 = generate_random_block(&fork_block_1.hash());
+        blockchain.insert(&fork_block_2);
+        //assert_eq!(blockchain.tip(), block_2.hash());
+        let fork_block_3 = generate_random_block(&fork_block_2.hash());
+        blockchain.insert(&fork_block_3);
+        assert_eq!(blockchain.tip(), fork_block_3.hash());
+    }
+    #[test]
+    fn midtermproject1_insert_3_fork_and_back() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&block_1);
+        assert_eq!(blockchain.tip(), block_1.hash());
+        let block_2 = generate_random_block(&block_1.hash());
+        blockchain.insert(&block_2);
+        assert_eq!(blockchain.tip(), block_2.hash());
+        let block_3 = generate_random_block(&block_2.hash());
+        blockchain.insert(&block_3);
+        assert_eq!(blockchain.tip(), block_3.hash());
+        let fork_block_1 = generate_random_block(&block_2.hash());
+        blockchain.insert(&fork_block_1);
+        let fork_block_2 = generate_random_block(&fork_block_1.hash());
+        blockchain.insert(&fork_block_2);
+        assert_eq!(blockchain.tip(), fork_block_2.hash());
+        let block_4 = generate_random_block(&block_3.hash());
+        blockchain.insert(&block_4);
+        let block_5 = generate_random_block(&block_4.hash());
+        blockchain.insert(&block_5);
+        assert_eq!(blockchain.tip(), block_5.hash());
+    }
+    #[test]
+    fn midtermproject1_insert_3_fork_and_6() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&block_1);
+        assert_eq!(blockchain.tip(), block_1.hash());
+        let block_2 = generate_random_block(&block_1.hash());
+        blockchain.insert(&block_2);
+        assert_eq!(blockchain.tip(), block_2.hash());
+        let block_3 = generate_random_block(&block_2.hash());
+        blockchain.insert(&block_3);
+        assert_eq!(blockchain.tip(), block_3.hash());
+        let fork_block_1 = generate_random_block(&block_2.hash());
+        blockchain.insert(&fork_block_1);
+        let fork_block_2 = generate_random_block(&fork_block_1.hash());
+        blockchain.insert(&fork_block_2);
+        assert_eq!(blockchain.tip(), fork_block_2.hash());
+        let another_block_1 = generate_random_block(&genesis_hash);
+        blockchain.insert(&another_block_1);
+        assert_eq!(blockchain.tip(), fork_block_2.hash());
+        let another_block_2 = generate_random_block(&another_block_1.hash());
+        blockchain.insert(&another_block_2);
+        assert_eq!(blockchain.tip(), fork_block_2.hash());
+        let another_block_3 = generate_random_block(&another_block_2.hash());
+        blockchain.insert(&another_block_3);
+        assert_eq!(blockchain.tip(), fork_block_2.hash());
+        let another_block_4 = generate_random_block(&another_block_3.hash());
+        blockchain.insert(&another_block_4);
+        let another_block_5 = generate_random_block(&another_block_4.hash());
+        blockchain.insert(&another_block_5);
+        assert_eq!(blockchain.tip(), another_block_5.hash());
+        let another_block_6 = generate_random_block(&another_block_5.hash());
+        blockchain.insert(&another_block_6);
+        assert_eq!(blockchain.tip(), another_block_6.hash());
+    }
+
 }
