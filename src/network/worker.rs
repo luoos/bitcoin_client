@@ -81,7 +81,7 @@ impl Context {
                     let mut new_hashes = Vec::<H256>::new();
                     let mut missing_parents = Vec::<H256>::new();
                     for b in blocks.iter() {
-                        if blockchain.insert(b) {
+                        if blockchain.insert_with_check(b) {
                             new_hashes.push(b.hash.clone());
                         }
                         if let Some(parent_hash) = blockchain.missing_parent(&b.hash) {

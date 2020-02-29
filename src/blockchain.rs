@@ -32,11 +32,16 @@ impl Blockchain {
         }
     }
 
-    // Insert a block into blockchain
-    pub fn insert(&mut self, block: &Block) -> bool {
-        if self.exist(&block.hash) {
+    pub fn insert_with_check(&mut self, block: &Block) -> bool {
+        if self.exist(&block.hash) || !self.validate_block(block) {
             return false;
         }
+        self.insert(block);
+        return true;
+    }
+
+    // Insert a block into blockchain
+    pub fn insert(&mut self, block: &Block) {
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
 
@@ -73,7 +78,6 @@ impl Blockchain {
                 }
             }
         }
-        return true;
     }
 
     fn handle_orphan(&mut self, new_parent: &H256) {
@@ -222,10 +226,10 @@ mod tests {
         let genesis_hash = blockchain.tip();
         assert_eq!(&genesis_hash, &H256::from([0u8; 32]));
         let block = generate_random_block(&genesis_hash);
-        assert!(blockchain.insert(&block));
+        blockchain.insert(&block);
         assert_eq!(blockchain.tip(), block.hash());
         assert_eq!(blockchain.tip_difficulty(), block.header.difficulty);
-        assert!(!blockchain.insert(&block));
+        assert!(!blockchain.insert_with_check(&block));
     }
 
     #[test]

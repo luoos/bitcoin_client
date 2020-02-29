@@ -319,7 +319,7 @@ mod tests {
         let new_block_1 = gen_mined_block(&chain_1.tip(), &difficulty);
         drop(chain_1);
         miner_ctx_1.found(new_block_1);
-        thread::sleep(time::Duration::from_millis(200));
+        thread::sleep(time::Duration::from_millis(100));
 
         let chain_1 = blockchain_1.lock().unwrap();
         let chain_2 = blockchain_2.lock().unwrap();
@@ -337,7 +337,7 @@ mod tests {
         let new_block_2 = gen_mined_block(&chain_2.tip(), &difficulty);
         miner_ctx_2.found(new_block_2);
         drop(chain_2);
-        thread::sleep(time::Duration::from_millis(200));
+        thread::sleep(time::Duration::from_millis(100));
 
         let chain_1 = blockchain_1.lock().unwrap();
         let chain_2 = blockchain_2.lock().unwrap();
@@ -355,7 +355,7 @@ mod tests {
         let new_block_3 = gen_mined_block(&chain_3.tip(), &difficulty);
         miner_ctx_3.found(new_block_3);
         drop(chain_3);
-        thread::sleep(time::Duration::from_millis(200));
+        thread::sleep(time::Duration::from_millis(100));
 
         let chain_1 = blockchain_1.lock().unwrap();
         let chain_2 = blockchain_2.lock().unwrap();
@@ -383,10 +383,15 @@ mod tests {
 
         let new_block_2 = gen_mined_block(&new_block_1.hash, &difficulty);
         miner_ctx_1.found(new_block_2);
-        thread::sleep(time::Duration::from_millis(300));
+        thread::sleep(time::Duration::from_millis(100));
         assert_eq!(6, blockchain_1.lock().unwrap().length());
         assert_eq!(6, blockchain_2.lock().unwrap().length());
         assert_eq!(6, blockchain_3.lock().unwrap().length());
+
+        let mut chain_1 = blockchain_1.lock().unwrap();
+        let wrong_difficulty: H256 = block::gen_difficulty_array(1).into();
+        let wrong_block = gen_mined_block(&chain_1.tip(), &wrong_difficulty);
+        assert!(!chain_1.insert_with_check(&wrong_block));
 
     }
 
