@@ -348,7 +348,6 @@ mod tests {
         let merkle_tree = MerkleTree::new(&input_data);
         for i in 0.. input_data.len() {
             let proof = merkle_tree.proof(i);
-            print!("{}", i);
             assert!(verify(&merkle_tree.root(), &input_data[i].hash(), &proof, i, input_data.len()));
         }
         let input_data_2: Vec<H256> = gen_merkle_tree_assignment2_another!();

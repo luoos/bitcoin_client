@@ -12,6 +12,7 @@ pub mod crypto;
 pub mod miner;
 pub mod network;
 pub mod transaction;
+pub mod config;
 
 use clap::clap_app;
 use crossbeam::channel;

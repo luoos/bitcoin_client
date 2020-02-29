@@ -14,8 +14,10 @@ use rand::distributions::Distribution;
 use crate::blockchain::Blockchain;
 use crate::transaction::Transaction;
 use crate::block::{Content, Header, Block};
-use crate::crypto::hash::H256;
 use crate::network::message::{Message};
+
+#[cfg(any(test, test_utilities))]
+use crate::crypto::hash::H256;
 
 static MINE_STEP: u32 = 1024;
 static DEMO_TRANS: usize = 4;
@@ -40,7 +42,6 @@ pub struct Context {
     blockchain: Arc<Mutex<Blockchain>>,
     trans: Arc<Mutex<Vec<Transaction>>>,
     pub nonce: u32,
-    difficulty: H256,  // assume constant difficulty
     pub mined_num: usize,
 }
 
@@ -57,7 +58,6 @@ pub fn new(
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
 
     let trans = Arc::new(Mutex::new(Vec::<Transaction>::new()));
-    let difficulty = blockchain.lock().unwrap().difficulty();
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
@@ -65,7 +65,6 @@ pub fn new(
         blockchain: Arc::clone(blockchain),
         trans: trans,
         nonce: 0,
-        difficulty: difficulty,
         mined_num: 0,
     };
 
@@ -188,7 +187,7 @@ impl Context {
     fn mining(&mut self) -> bool {
         let blockchain = self.blockchain.lock().unwrap();
         let tip = blockchain.tip();  // previous hash
-        let difficulty = self.difficulty.clone();
+        let difficulty = blockchain.difficulty();
         drop(blockchain);
 
         let mut trans = self.trans.lock().unwrap();
@@ -225,7 +224,8 @@ impl Context {
 
     #[cfg(any(test, test_utilities))]
     fn change_difficulty(&mut self, new_difficulty: &H256) {
-        self.difficulty = new_difficulty.clone();
+        let mut blockchain = self.blockchain.lock().unwrap();
+        blockchain.change_difficulty(new_difficulty);
     }
 
     #[cfg(any(test, test_utilities))]

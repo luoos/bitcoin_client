@@ -10,12 +10,14 @@ pub struct Blockchain {
     orphans: HashMap<H256, Block>,
     longest_hash: H256,
     max_index: usize,
+    difficulty: H256,  // assume difficulty is consistent
 }
 
 impl Blockchain {
     // Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
         let genesis = Block::genesis();
+        let difficulty = genesis.header.difficulty.clone();
         let longest_hash = genesis.get_hash();
         let mut map: HashMap<H256, Block> = HashMap::new();
         let orphans_map: HashMap<H256, Vec<Block>> = HashMap::new();
@@ -26,6 +28,7 @@ impl Blockchain {
             orphans: HashMap::new(),
             longest_hash: longest_hash,
             max_index: 0,
+            difficulty: difficulty,
         }
     }
 
@@ -102,14 +105,13 @@ impl Blockchain {
         self.longest_hash.clone()
     }
 
-    pub fn difficulty(&self) -> H256 {
-        self.blocks.get(&self.longest_hash)
-            .unwrap().header.difficulty.clone()
-    }
-
     // include genesis block
     pub fn length(&self) -> usize {
         self.max_index + 1
+    }
+
+    pub fn difficulty(&self) -> H256 {
+        self.difficulty.clone()
     }
 
     // check existence, including orphans_map
@@ -132,6 +134,20 @@ impl Blockchain {
 
     pub fn get_block(&self, hash: &H256) -> Block {
         self.blocks.get(hash).unwrap().clone()
+    }
+
+    pub fn validate_block(&self, block: &Block) -> bool {
+        // check difficulty
+        if block.header.difficulty != self.difficulty {
+            return false;
+        }
+
+        // check proof of work
+        let header_hash = block.header.hash();
+        if header_hash == block.hash && header_hash < self.difficulty {
+            return true;
+        }
+        return false;
     }
 
     pub fn hash_chain(&self) -> Vec<H256> {
@@ -179,13 +195,26 @@ impl Blockchain {
         }
         result
     }
+
+    #[cfg(any(test, test_utilities))]
+    pub fn change_difficulty(&mut self, difficulty: &H256) {
+        self.difficulty = difficulty.clone();
+    }
+
+    #[cfg(any(test, test_utilities))]
+    fn tip_difficulty(&self) -> H256 {
+        self.blocks.get(&self.longest_hash)
+            .unwrap().header.difficulty.clone()
+    }
 }
 
 #[cfg(any(test, test_utilities))]
 mod tests {
     use super::*;
     use crate::block::test::generate_random_block;
+    use crate::block::test::generate_block;
     use crate::crypto::hash::Hashable;
+    use crate::block;
 
     #[test]
     fn insert_one() {
@@ -195,7 +224,7 @@ mod tests {
         let block = generate_random_block(&genesis_hash);
         assert!(blockchain.insert(&block));
         assert_eq!(blockchain.tip(), block.hash());
-        assert_eq!(blockchain.difficulty(), block.header.difficulty);
+        assert_eq!(blockchain.tip_difficulty(), block.header.difficulty);
         assert!(!blockchain.insert(&block));
     }
 
@@ -495,4 +524,25 @@ mod tests {
         assert_eq!(blockchain.tip(), another_block_6.hash());
     }
 
+    #[test]
+    fn test_validate_block() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let difficulty: H256 = block::gen_difficulty_array(0).into();
+        blockchain.change_difficulty(&difficulty);
+        let block = generate_block(&genesis_hash, 40, &difficulty);
+        assert!(blockchain.validate_block(&block));
+
+        let difficulty: H256 = block::gen_difficulty_array(2).into();
+        blockchain.change_difficulty(&difficulty);
+        let mut block = generate_block(&genesis_hash, 0, &difficulty);
+        assert!(blockchain.validate_block(&block));
+
+        let hash: H256 = block::gen_difficulty_array(20).into();
+        block.change_hash(&hash);
+        assert!(!blockchain.validate_block(&block));
+
+        let block = generate_block(&genesis_hash, 1, &difficulty);
+        assert!(!blockchain.validate_block(&block));
+    }
 }
