@@ -172,6 +172,7 @@ impl Content {
     }
 }
 
+// Generate 32-bytes array to set difficulty
 pub fn gen_difficulty_array(mut zero_cnt: i32) -> [u8; 32] {
     let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
 

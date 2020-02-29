@@ -18,7 +18,7 @@ use crate::network::message::{Message};
 use crate::crypto::hash::H256;
 use crate::config::MINING_STEP;
 
-static DEMO_TRANS: usize = 4;
+static DEMO_TRANS: usize = 4; //for demo: # of transactions in content
 
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
@@ -161,6 +161,7 @@ impl Context {
         }
     }
 
+    // Procedures when new block found
     fn found(&mut self, block: Block) {
         info!("Found block: {:?}", block);
         // insert block into chain
@@ -182,6 +183,7 @@ impl Context {
         self.server.broadcast(Message::NewBlockHashes(vec));
     }
 
+    // Mining process!
     fn mining(&mut self) -> bool {
         let blockchain = self.blockchain.lock().unwrap();
         let tip = blockchain.tip();  // previous hash
@@ -229,6 +231,7 @@ impl Context {
     }
 }
 
+// Perforn mining for MINING_STEP here
 fn mining_base(header: &mut Header, difficulty: H256) -> bool {
     for _ in 0..MINING_STEP {
         if header.hash() < difficulty {
@@ -267,6 +270,8 @@ mod tests {
     use std::thread;
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use crossbeam::channel;
+
+    static TEST_DIF :i32 = 4;
 
     fn gen_mined_block(parent_hash: &H256, difficulty: &H256) -> Block {
         let content = generate_random_content();
@@ -321,6 +326,7 @@ mod tests {
         miner_ctx_1.found(new_block_1);
         thread::sleep(time::Duration::from_millis(100));
 
+        // test block broadcast
         let chain_1 = blockchain_1.lock().unwrap();
         let chain_2 = blockchain_2.lock().unwrap();
         let chain_3 = blockchain_3.lock().unwrap();
@@ -388,11 +394,15 @@ mod tests {
         assert_eq!(6, blockchain_2.lock().unwrap().length());
         assert_eq!(6, blockchain_3.lock().unwrap().length());
 
+        // test insert_with_check
         let mut chain_1 = blockchain_1.lock().unwrap();
         let wrong_difficulty: H256 = block::gen_difficulty_array(1).into();
         let wrong_block = gen_mined_block(&chain_1.tip(), &wrong_difficulty);
         assert!(!chain_1.insert_with_check(&wrong_block));
-
+        assert!(!chain_1.insert_with_check(&new_block_1));
+        let correct_difficulty: H256 = block::gen_difficulty_array(TEST_DIF).into();
+        let correct_block = gen_mined_block(&chain_1.tip(), &correct_difficulty);
+        assert!(chain_1.insert_with_check(&correct_block));
     }
 
     fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context, Arc<Mutex<Blockchain>>) {
@@ -401,7 +411,7 @@ mod tests {
         server_ctx.start().unwrap();
 
         let mut blockchain = Blockchain::new();
-        let difficulty: H256 = block::gen_difficulty_array(4).into();
+        let difficulty: H256 = block::gen_difficulty_array(TEST_DIF).into();
         blockchain.change_difficulty(&difficulty);
         let blockchain =  Arc::new(Mutex::new(blockchain));
         let worker_ctx = worker::new(4, receiver, &server, &blockchain);

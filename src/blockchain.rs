@@ -32,6 +32,7 @@ impl Blockchain {
         }
     }
 
+    // Insert a block with existence & validation check (used in inter-miner blocks broadcast)
     pub fn insert_with_check(&mut self, block: &Block) -> bool {
         if self.exist(&block.hash) || !self.validate_block(block) {
             return false;
@@ -40,7 +41,7 @@ impl Blockchain {
         return true;
     }
 
-    // Insert a block into blockchain
+    // Insert a block into blockchain if parent exists; otherwise, put it into orphan buffer
     pub fn insert(&mut self, block: &Block) {
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
@@ -80,6 +81,7 @@ impl Blockchain {
         }
     }
 
+    // Deal with a newly-arrived parent block's orphans
     fn handle_orphan(&mut self, new_parent: &H256) {
         if let Some(children_vec) = self.orphans_map.remove(new_parent) {
             for child in children_vec.iter() {
@@ -89,10 +91,12 @@ impl Blockchain {
         }
     }
 
+    // Check if a block is orphan
     pub fn is_orphan(&self, hash: &H256) -> bool {
         self.orphans.contains_key(hash)
     }
 
+    // Trace back the very-first missing block of a block's hash
     pub fn missing_parent(&self, orphan_hash: &H256) -> Option<H256> {
         if !self.is_orphan(orphan_hash) {
             return None
@@ -102,6 +106,21 @@ impl Blockchain {
             cur = &self.orphans.get(cur).unwrap().header.parent;
         }
         Some(cur.clone())
+    }
+
+    // Perform validation checks on PoW & difficulty
+    pub fn validate_block(&self, block: &Block) -> bool {
+        // check difficulty
+        if block.header.difficulty != self.difficulty {
+            return false;
+        }
+
+        // check proof of work
+        let header_hash = block.header.hash();
+        if header_hash == block.hash && header_hash < self.difficulty {
+            return true;
+        }
+        return false;
     }
 
     // Get the last block's hash of the longest chain
@@ -124,6 +143,7 @@ impl Blockchain {
             || self.orphans.contains_key(hash)
     }
 
+    // Given hashes, get blocks from chain & orphan buffer
     pub fn get_blocks(&self, hashes: &Vec<H256>) -> Vec<Block> {
         let mut blocks = Vec::<Block>::new();
         for h in hashes.iter() {
@@ -136,24 +156,16 @@ impl Blockchain {
         blocks
     }
 
+    // Given hash, get a block from chain or orphan buffer
     pub fn get_block(&self, hash: &H256) -> Block {
-        self.blocks.get(hash).unwrap().clone()
+        if self.blocks.contains_key(hash)  {
+            self.blocks.get(hash).unwrap().clone()
+        } else if self.orphans.get(hash)  {
+            self.orphans.get(hash).clone()
+        }
     }
 
-    pub fn validate_block(&self, block: &Block) -> bool {
-        // check difficulty
-        if block.header.difficulty != self.difficulty {
-            return false;
-        }
-
-        // check proof of work
-        let header_hash = block.header.hash();
-        if header_hash == block.hash && header_hash < self.difficulty {
-            return true;
-        }
-        return false;
-    }
-
+    // Get a vector of hashes in longest-chain from tip to genesis
     pub fn hash_chain(&self) -> Vec<H256> {
         let mut cur_hash = self.tip();
         let mut cur_block = self.blocks.get(&cur_hash).unwrap();
@@ -168,6 +180,7 @@ impl Blockchain {
         result
     }
 
+    // Get a vector of headers in longest-chain from tip to genesis
     pub fn header_chain(&self) -> Vec<Header> {
         let hash_chain = self.hash_chain();
         let header_chain = hash_chain.iter()
@@ -176,6 +189,7 @@ impl Blockchain {
         header_chain
     }
 
+    // Get a vector of blocks in longest-chain from tip to genesis
     pub fn block_chain(&self) -> Vec<Block> {
         let hash_chain = self.hash_chain();
         let block_chain = hash_chain.iter()
@@ -184,7 +198,6 @@ impl Blockchain {
         block_chain
     }
 
-    // Get the last block's hash of the longest chain
     #[cfg(any(test, test_utilities))]
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
         let mut cur_hash = self.tip();

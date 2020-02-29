@@ -58,6 +58,7 @@ impl Context {
                     debug!("Pong: {}", nonce);
                 }
                 Message::NewBlockHashes(hashes) => {
+                    //Check whether the hashes are already in blockchain; if not,sending GetBlocks to ask for them.
                     debug!("NewBlockHashes: {:?}", hashes);
                     let blockchain = self.blockchain.lock().unwrap();
                     let to_get: Vec<H256> = hashes.into_iter()
@@ -69,6 +70,7 @@ impl Context {
                     }
                 }
                 Message::GetBlocks(hashes) => {
+                    //Check whether the hashes are already in blockchain; if yes,sending the corresponding blocks thru GetBlocks.
                     debug!("GetBlocks: {:?}", hashes);
                     let blocks = self.blockchain.lock().unwrap().get_blocks(&hashes);
                     if blocks.len() > 0 {
@@ -76,6 +78,7 @@ impl Context {
                     }
                 }
                 Message::Blocks(blocks) => {
+                    //Insert the blocks into blockchain if not already in it; also ask for missing parent blocks
                     debug!("Blocks: {:?}", blocks);
                     let mut blockchain = self.blockchain.lock().unwrap();
                     let mut new_hashes = Vec::<H256>::new();
