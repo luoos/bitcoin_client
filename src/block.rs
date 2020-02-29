@@ -232,7 +232,7 @@ pub mod test {
         Block::new(header, content)
     }
 
-    fn generate_header(parent: &H256, content: &Content, nonce: u32,
+    pub fn generate_header(parent: &H256, content: &Content, nonce: u32,
                            difficulty: &H256) -> Header {
         let ts = 100u128;
         let merkle_root = content.merkle_root();

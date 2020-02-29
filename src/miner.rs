@@ -256,7 +256,10 @@ mod tests {
     use crate::miner;
     use crate::crypto::hash::H256;
     use crate::network::{worker, server};
-    use crate::block::test::generate_random_block;
+    use crate::block::{self, Block};
+    use crate::block::test::generate_random_content;
+    use crate::block::test::generate_header;
+    use super::mining_base;
 
     use log::{error, info};
     use std::sync::{Arc, Mutex};
@@ -264,6 +267,14 @@ mod tests {
     use std::thread;
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use crossbeam::channel;
+
+    fn gen_mined_block(parent_hash: &H256, difficulty: &H256) -> Block {
+        let content = generate_random_content();
+        let mut header = generate_header(parent_hash, &content, 0, difficulty);
+        // assume a easy difficulty
+        assert!(mining_base(&mut header, difficulty.clone()));
+        Block::new(header, content)
+    }
 
     #[test]
     fn test_miner() {
@@ -304,7 +315,8 @@ mod tests {
         connect_peers(&server_3, peers_2.clone());
 
         let chain_1 = blockchain_1.lock().unwrap();
-        let new_block_1 = generate_random_block(&chain_1.tip());
+        let difficulty = chain_1.difficulty();
+        let new_block_1 = gen_mined_block(&chain_1.tip(), &difficulty);
         drop(chain_1);
         miner_ctx_1.found(new_block_1);
         thread::sleep(time::Duration::from_millis(200));
@@ -322,7 +334,7 @@ mod tests {
         drop(chain_3);
 
         let chain_2 = blockchain_1.lock().unwrap();
-        let new_block_2 = generate_random_block(&chain_2.tip());
+        let new_block_2 = gen_mined_block(&chain_2.tip(), &difficulty);
         miner_ctx_2.found(new_block_2);
         drop(chain_2);
         thread::sleep(time::Duration::from_millis(200));
@@ -340,7 +352,7 @@ mod tests {
         drop(chain_3);
 
         let chain_3 = blockchain_1.lock().unwrap();
-        let new_block_3 = generate_random_block(&chain_3.tip());
+        let new_block_3 = gen_mined_block(&chain_3.tip(), &difficulty);
         miner_ctx_3.found(new_block_3);
         drop(chain_3);
         thread::sleep(time::Duration::from_millis(200));
@@ -362,14 +374,14 @@ mod tests {
 
         // test get missing parent
         let mut chain_1 = blockchain_1.lock().unwrap();
-        let new_block_1 = generate_random_block(&chain_1.tip());
+        let new_block_1 = gen_mined_block(&chain_1.tip(), &difficulty);
         chain_1.insert(&new_block_1);
         drop(chain_1);
         assert_eq!(5, blockchain_1.lock().unwrap().length());
         assert_eq!(4, blockchain_2.lock().unwrap().length());
         assert_eq!(4, blockchain_3.lock().unwrap().length());
 
-        let new_block_2 = generate_random_block(&new_block_1.hash);
+        let new_block_2 = gen_mined_block(&new_block_1.hash, &difficulty);
         miner_ctx_1.found(new_block_2);
         thread::sleep(time::Duration::from_millis(300));
         assert_eq!(6, blockchain_1.lock().unwrap().length());
@@ -383,7 +395,10 @@ mod tests {
         let (server_ctx, server) = server::new(ipv4_addr, sender).unwrap();
         server_ctx.start().unwrap();
 
-        let blockchain =  Arc::new(Mutex::new(Blockchain::new()));
+        let mut blockchain = Blockchain::new();
+        let difficulty: H256 = block::gen_difficulty_array(4).into();
+        blockchain.change_difficulty(&difficulty);
+        let blockchain =  Arc::new(Mutex::new(blockchain));
         let worker_ctx = worker::new(4, receiver, &server, &blockchain);
         worker_ctx.start();
 
