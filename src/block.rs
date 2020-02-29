@@ -254,7 +254,7 @@ pub mod test {
         let g = Block::genesis();
         assert_eq!(0, g.index);
         assert_eq!(g.hash, H256::from([0u8; 32]));
-        let array: [u8; 32] = g.header.difficulty.into();
+        // let array: [u8; 32] = g.header.difficulty.into();
         assert!(DIFFICULTY > 0);
         assert!(DIFFICULTY < 256);
         // This is related to DIFFICULTY in config.rs

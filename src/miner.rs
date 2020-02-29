@@ -15,11 +15,9 @@ use crate::blockchain::Blockchain;
 use crate::transaction::Transaction;
 use crate::block::{Content, Header, Block};
 use crate::network::message::{Message};
-
-#[cfg(any(test, test_utilities))]
 use crate::crypto::hash::H256;
+use crate::config::MINING_STEP;
 
-static MINE_STEP: u32 = 1024;
 static DEMO_TRANS: usize = 4;
 
 enum ControlSignal {
@@ -207,18 +205,14 @@ impl Context {
                 &difficulty, &content.merkle_root());
 
         let mut bingo = false;
-        let mut i: u32 = 0;
-        while i < MINE_STEP {
-            if header.hash() < difficulty {
-                let block = Block::new(header, content);
-                self.found(block);
-                bingo = true;
-                break;
-            }
-            header.change_nonce();
-            i += 1;
+        if mining_base(&mut header, difficulty) {
+            let block = Block::new(header, content);
+            self.found(block);
+            bingo = true;
+            self.nonce = 0;
+        } else {
+            self.nonce = header.nonce;
         }
-        self.nonce = self.nonce.overflowing_add(i).0;
         bingo
     }
 
@@ -233,6 +227,16 @@ impl Context {
         let trans = self.trans.lock().unwrap();
         trans.len()
     }
+}
+
+fn mining_base(header: &mut Header, difficulty: H256) -> bool {
+    for _ in 0..MINING_STEP {
+        if header.hash() < difficulty {
+            return true;
+        }
+        header.change_nonce();
+    }
+    return false;
 }
 
 // for demo
@@ -274,12 +278,12 @@ mod tests {
         difficulty = H256::from([0u8; 32]);
         miner.change_difficulty(&difficulty);
         assert!(!miner.mining());
-        assert_eq!(miner::MINE_STEP, miner.nonce);
+        assert_eq!(miner::MINING_STEP, miner.nonce);
         assert_eq!(miner::DEMO_TRANS, miner.trans_len());
         difficulty = H256::from([255u8; 32]);
         miner.change_difficulty(&difficulty);
         assert!(miner.mining());
-        assert_eq!(miner::MINE_STEP, miner.nonce);
+        assert_eq!(0, miner.nonce);
         assert_eq!(0, miner.trans_len());
     }
 
