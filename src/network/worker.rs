@@ -1,5 +1,5 @@
 use crossbeam::channel;
-use log::{debug, warn};
+use log::{debug, warn, info};
 
 use std::thread;
 use std::sync::{Arc, Mutex};
@@ -9,6 +9,8 @@ use super::peer;
 use crate::network::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
 use crate::crypto::hash::H256;
+use std::time::{SystemTime, UNIX_EPOCH};
+use crate::block::Block;
 
 #[derive(Clone)]
 pub struct Context {
@@ -85,6 +87,7 @@ impl Context {
                     let mut missing_parents = Vec::<H256>::new();
                     for b in blocks.iter() {
                         if blockchain.insert_with_check(b) {
+                            test_delay(b.clone());
                             new_hashes.push(b.hash.clone());
                         }
                         if let Some(parent_hash) = blockchain.missing_parent(&b.hash) {
@@ -102,4 +105,10 @@ impl Context {
             }
         }
     }
+}
+
+fn test_delay(block : Block)  {
+    let cur_time : u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+    let delay = cur_time - block.header.timestamp;
+    info!("Block delay for {:?} is: {:?} milli second", block.hash, delay);
 }

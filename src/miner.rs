@@ -163,7 +163,8 @@ impl Context {
 
     // Procedures when new block found
     fn found(&mut self, block: Block) {
-        info!("Found block: {:?}", block);
+        let block_size = get_block_size(block.clone());
+        info!("Found block: {:?} of size: {:?}", block, block_size);
         // insert block into chain
         let mut blockchain = self.blockchain.lock().unwrap();
         blockchain.insert(&block);
@@ -251,6 +252,12 @@ fn generate_random_str() -> String {
 // for demo
 pub fn generate_random_transaction() -> Transaction {
     Transaction {msg: generate_random_str()}
+}
+
+// for demo
+pub fn get_block_size(block: Block) -> usize {
+    let serialized_block = bincode::serialize(&block).unwrap();
+    serialized_block.len()
 }
 
 #[cfg(any(test, test_utilities))]

@@ -157,11 +157,13 @@ impl Blockchain {
     }
 
     // Given hash, get a block from chain or orphan buffer
-    pub fn get_block(&self, hash: &H256) -> Block {
-        if self.blocks.contains_key(hash)  {
-            self.blocks.get(hash).unwrap().clone()
-        } else if self.orphans.get(hash)  {
-            self.orphans.get(hash).clone()
+    pub fn get_block(&self, hash: &H256) -> Option<Block> {
+        if let Some(b) = self.blocks.get(hash) {
+            Some(b.clone())
+        } else if let Some(b) = self.orphans.get(hash) {
+            Some(b.clone())
+        } else {
+            None
         }
     }
 
@@ -184,7 +186,7 @@ impl Blockchain {
     pub fn header_chain(&self) -> Vec<Header> {
         let hash_chain = self.hash_chain();
         let header_chain = hash_chain.iter()
-                .map(|h| self.get_block(h).header.clone())
+                .map(|h| self.get_block(h).unwrap().header.clone())
                 .collect();
         header_chain
     }
@@ -193,7 +195,7 @@ impl Blockchain {
     pub fn block_chain(&self) -> Vec<Block> {
         let hash_chain = self.hash_chain();
         let block_chain = hash_chain.iter()
-                .map(|h| self.get_block(h).clone())
+                .map(|h| self.get_block(h).unwrap().clone())
                 .collect();
         block_chain
     }
@@ -356,6 +358,20 @@ mod tests {
         assert_eq!(2, blocks.len());
         assert_eq!(&block1.hash, &blocks[0].hash);
         assert_eq!(&block2.hash, &blocks[1].hash);
+    }
+
+    #[test]
+    fn test_get_block() {
+        let mut blockchain = Blockchain::new();
+        let genesis_hash = blockchain.tip();
+        let block1 = generate_random_block(&genesis_hash);
+        let block2 = generate_random_block(&block1.hash);
+        let block3 = generate_random_block(&block2.hash);
+        blockchain.insert(&block3);
+        assert_eq!(block3, blockchain.get_block(&block3.hash).unwrap());
+        assert_eq!(None, blockchain.get_block(&block1.hash));
+        blockchain.insert(&block2);
+        assert_eq!(block2, blockchain.get_block(&block2.hash).unwrap());
     }
 
     #[test]

@@ -33,7 +33,7 @@ pub struct Header {
     pub parent: H256,
     pub nonce: u32,
     pub difficulty: H256,
-    timestamp: u64,
+    pub timestamp: u64,
     merkle_root: H256,
 }
 
