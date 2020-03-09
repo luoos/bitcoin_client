@@ -13,6 +13,7 @@ pub mod miner;
 pub mod network;
 pub mod transaction;
 pub mod config;
+pub mod random_generator;
 
 use clap::clap_app;
 use crossbeam::channel;

@@ -12,6 +12,10 @@ pub trait Hashable {
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
 pub struct H256([u8; 32]); // big endian u256
 
+/// A H160 hash.
+#[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
+pub struct H160([u8; 20]); // H160 (address)
+
 impl H256 {
     pub fn concat_hash(&mut self, input: &H256, left: bool) {
         let mut ctx = digest::Context::new(&digest::SHA256);
@@ -25,6 +29,14 @@ impl H256 {
         let mut raw_hash: [u8; 32] = [0; 32];
         raw_hash[0..32].copy_from_slice(ctx.finish().as_ref());
         self.0 = raw_hash;
+    }
+
+    // Convert to H160 Address
+    pub fn to_address(&self) -> H160 {
+        let mut buffer: [u8; 20] = [0; 20];
+        let bytes : [u8; 32] = self.0;
+        buffer[..].copy_from_slice(bytes[12..32].as_ref());
+        H160(buffer)
     }
 }
 
@@ -124,17 +136,45 @@ impl PartialOrd for H256 {
     }
 }
 
+impl std::fmt::Debug for H160 {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{:>02x}{:>02x}..{:>02x}{:>02x}",
+            &self.0[0], &self.0[1], &self.0[18], &self.0[19]
+        )
+    }
+}
+
+impl std::convert::From<&[u8; 20]> for H160 {
+    fn from(input: &[u8; 20]) -> H160 {
+        let mut buffer: [u8; 20] = [0; 20];
+        buffer[..].copy_from_slice(input);
+        H160(buffer)
+    }
+}
+
+impl std::convert::From<&H160> for [u8; 20] {
+    fn from(input: &H160) -> [u8; 20] {
+        let mut buffer: [u8; 20] = [0; 20];
+        buffer[..].copy_from_slice(&input.0);
+        buffer
+    }
+}
+
+impl std::convert::From<[u8; 20]> for H160 {
+    fn from(input: [u8; 20]) -> H160 {
+        H160(input)
+    }
+}
+
+impl std::convert::From<H160> for [u8; 20] {
+    fn from(input: H160) -> [u8; 20] {
+        input.0
+    }
+}
+
 #[cfg(any(test, test_utilities))]
 pub mod tests {
-    use super::H256;
-    use rand::Rng;
-
-    pub fn generate_random_hash() -> H256 {
-        let mut rng = rand::thread_rng();
-        let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        let mut raw_bytes = [0; 32];
-        raw_bytes.copy_from_slice(&random_bytes);
-        (&raw_bytes).into()
-    }
 
 }

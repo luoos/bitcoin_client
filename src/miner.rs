@@ -8,14 +8,13 @@ use std::time::SystemTime;
 
 use std::thread;
 use std::sync::{Arc, Mutex};
-use rand::thread_rng;
-use rand::distributions::Distribution;
 
 use crate::blockchain::Blockchain;
 use crate::transaction::Transaction;
 use crate::block::{Content, Header, Block};
 use crate::network::message::{Message};
 use crate::crypto::hash::H256;
+use crate::random_generator::generate_random_transaction;
 use crate::config::MINING_STEP;
 
 static DEMO_TRANS: usize = 4; //for demo: # of transactions in content
@@ -244,17 +243,6 @@ fn mining_base(header: &mut Header, difficulty: H256) -> bool {
 }
 
 // for demo
-fn generate_random_str() -> String {
-    let rng = thread_rng();
-    rand::distributions::Alphanumeric.sample_iter(rng).take(10).collect()
-}
-
-// for demo
-pub fn generate_random_transaction() -> Transaction {
-    Transaction {msg: generate_random_str()}
-}
-
-// for demo
 pub fn get_block_size(block: Block) -> usize {
     let serialized_block = bincode::serialize(&block).unwrap();
     serialized_block.len()
@@ -262,14 +250,13 @@ pub fn get_block_size(block: Block) -> usize {
 
 #[cfg(any(test, test_utilities))]
 mod tests {
+    use super::mining_base;
     use crate::blockchain::Blockchain;
     use crate::miner;
     use crate::crypto::hash::H256;
     use crate::network::{worker, server};
     use crate::block::{self, Block};
-    use crate::block::test::generate_random_content;
-    use crate::block::test::generate_header;
-    use super::mining_base;
+    use crate::random_generator::*;
 
     use log::{error, info};
     use std::sync::{Arc, Mutex};

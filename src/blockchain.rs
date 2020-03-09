@@ -230,10 +230,9 @@ impl Blockchain {
 #[cfg(any(test, test_utilities))]
 mod tests {
     use super::*;
-    use crate::block::test::generate_random_block;
-    use crate::block::test::generate_block;
     use crate::crypto::hash::Hashable;
     use crate::block;
+    use crate::random_generator::*;
 
     #[test]
     fn insert_one() {
@@ -563,18 +562,17 @@ mod tests {
         let genesis_hash = blockchain.tip();
         let difficulty: H256 = block::gen_difficulty_array(0).into();
         blockchain.change_difficulty(&difficulty);
-        let block = generate_block(&genesis_hash, 40, &difficulty);
+        let mut block = generate_block(&genesis_hash, 40, &difficulty);
         assert!(blockchain.validate_block(&block));
 
-        let difficulty: H256 = block::gen_difficulty_array(2).into();
-        blockchain.change_difficulty(&difficulty);
-        let mut block = generate_block(&genesis_hash, 0, &difficulty);
-        assert!(blockchain.validate_block(&block));
-
+        // Hash Validate
         let hash: H256 = block::gen_difficulty_array(20).into();
         block.change_hash(&hash);
         assert!(!blockchain.validate_block(&block));
 
+        //POW validate
+        let difficulty: H256 = block::gen_difficulty_array(20).into();
+        blockchain.change_difficulty(&difficulty);
         let block = generate_block(&genesis_hash, 1, &difficulty);
         assert!(!blockchain.validate_block(&block));
     }
