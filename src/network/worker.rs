@@ -8,9 +8,10 @@ use super::message::Message;
 use super::peer;
 use crate::network::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
-use crate::crypto::hash::H256;
+use crate::crypto::hash::{H256, Hashable};
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::block::Block;
+use crate::mempool::MemPool;
 
 #[derive(Clone)]
 pub struct Context {
@@ -18,6 +19,7 @@ pub struct Context {
     num_worker: usize,
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
+    mempool: Arc<Mutex<MemPool>>,
 }
 
 pub fn new(
@@ -25,12 +27,14 @@ pub fn new(
     msg_src: channel::Receiver<(Vec<u8>, peer::Handle)>,
     server: &ServerHandle,
     blockchain: &Arc<Mutex<Blockchain>>,
+    mempool: &Arc<Mutex<MemPool>>,
 ) -> Context {
     Context {
         msg_chan: msg_src,
         num_worker,
         server: server.clone(),
         blockchain: Arc::clone(blockchain),
+        mempool: Arc::clone(mempool),
     }
 }
 
@@ -61,7 +65,7 @@ impl Context {
                 }
                 Message::NewBlockHashes(hashes) => {
                     //Check whether the hashes are already in blockchain; if not,sending GetBlocks to ask for them.
-                    debug!("NewBlockHashes: {:?}", hashes);
+                    debug!("NewBlockHashes message received!!: {:?}", hashes);
                     let blockchain = self.blockchain.lock().unwrap();
                     let to_get: Vec<H256> = hashes.into_iter()
                                 .filter(|h| !blockchain.exist(h))
@@ -72,8 +76,8 @@ impl Context {
                     }
                 }
                 Message::GetBlocks(hashes) => {
-                    //Check whether the hashes are already in blockchain; if yes,sending the corresponding blocks thru GetBlocks.
-                    debug!("GetBlocks: {:?}", hashes);
+                    //Check whether the hashes are already in blockchain; if yes,sending the corresponding blocks thru Blocks.
+                    debug!("GetBlocks message received: {:?}", hashes);
                     let blocks = self.blockchain.lock().unwrap().get_blocks(&hashes);
                     if blocks.len() > 0 {
                         peer.write(Message::Blocks(blocks));
@@ -81,13 +85,15 @@ impl Context {
                 }
                 Message::Blocks(blocks) => {
                     //Insert the blocks into blockchain if not already in it; also ask for missing parent blocks
-                    debug!("Blocks: {:?}", blocks);
+                    debug!("Blocks message received!!");
                     let mut blockchain = self.blockchain.lock().unwrap();
+                    let mut mempool = self.mempool.lock().unwrap();
                     let mut new_hashes = Vec::<H256>::new();
                     let mut missing_parents = Vec::<H256>::new();
                     for b in blocks.iter() {
                         if blockchain.insert_with_check(b) {
-                            test_delay(b.clone());
+                            print_block_delay(b.clone());
+                            mempool.remove_trans(&b.content.get_trans_hashes());
                             new_hashes.push(b.hash.clone());
                         }
                         if let Some(parent_hash) = blockchain.missing_parent(&b.hash) {
@@ -102,12 +108,46 @@ impl Context {
                         self.server.broadcast(Message::NewBlockHashes(new_hashes));
                     }
                 }
+                Message::NewTransactionHashes(hashes) => {
+                    //Check whether the transactions are already in mempool/blockchain; if not,sending GetTransactions to ask for them.
+                    debug!("NewTransactionHashes message received: {:?}", hashes);
+                    let mempool  = self.mempool.lock().unwrap();
+                    let to_get: Vec<H256> = hashes.into_iter()
+                                .filter(|h|!mempool.exist(h)).collect();
+                    drop(mempool);
+                    if to_get.len() > 0 {
+                        peer.write(Message::GetTransactions(to_get));
+                    }
+                }
+                Message::GetTransactions(hashes) => {
+                    //Check whether the hashes are already in mempool; if yes,sending the corresponding transactions thru Transactions.
+                    debug!("GetTransactions message received: {:?}", hashes);
+                    let trans = self.mempool.lock().unwrap().get_trans(&hashes);
+                    if trans.len() > 0 {
+                        peer.write(Message::Transactions(trans));
+                    }
+                }
+                Message::Transactions(trans) => {
+                    //Add the transactions into mempool if not already in it and passing signature check
+                    debug!("Transactions message received!!");
+                    let mut mempool = self.mempool.lock().unwrap();
+                    let mut new_hashes = Vec::<H256>::new();
+                    for t in trans.iter() {
+                        if mempool.add_with_check(t) {
+                            new_hashes.push(t.hash());
+                        }
+                    }
+                    drop(mempool);
+                    if new_hashes.len() > 0 {
+                        self.server.broadcast(Message::NewTransactionHashes(new_hashes));
+                    }
+                }
             }
         }
     }
 }
 
-fn test_delay(block : Block)  {
+fn print_block_delay(block : Block)  {
     let cur_time : u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
     let delay = cur_time - block.header.timestamp;
     info!("Block delay for {:?} is: {:?} milli second", block.hash, delay);

@@ -5,16 +5,17 @@ use chrono::prelude::DateTime;
 use chrono::Utc;
 use std::time::{UNIX_EPOCH, Duration};
 use crate::crypto::hash::{H256, Hashable};
-use crate::transaction::Transaction;
+use crate::transaction::SignedTransaction;
 use crate::crypto::merkle::MerkleTree;
 use crate::config::DIFFICULTY;
+use crate::helper::gen_difficulty_array;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     pub hash: H256,         // the hash of the header in this block
     pub index: usize,       // the distance from the genesis block
     pub header: Header,
-    content: Content,   // transaction in this block
+    pub content: Content,   // transaction in this block
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,7 +40,7 @@ pub struct Header {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Content {
-    trans: Vec<Transaction>
+    pub trans: Vec<SignedTransaction>
 }
 
 impl Hashable for Block {
@@ -70,7 +71,7 @@ impl Block {
         };
 
         let content = Content {
-            trans: Vec::<Transaction>::new(),
+            trans: Vec::<SignedTransaction>::new(),
         };
 
         Block {
@@ -92,6 +93,17 @@ impl Block {
 
     pub fn get_hash(&self) -> H256 {
         self.hash.clone()
+    }
+
+    // Check transaction signature in content; if anyone fails, the whole block fails
+    pub fn validate_trans(&self) -> bool {
+        let trans = &self.content.trans;
+        for t in trans.iter() {
+            if !t.sign_check() {
+                return false;
+            }
+        }
+        true
     }
 
     #[cfg(any(test, test_utilities))]
@@ -152,17 +164,17 @@ impl Header {
 impl Content {
     pub fn new() -> Self {
         Self {
-            trans: Vec::<Transaction>::new(),
+            trans: Vec::<SignedTransaction>::new(),
         }
     }
 
-    pub fn new_with_trans(trans: &Vec<Transaction>) -> Self {
+    pub fn new_with_trans(trans: &Vec<SignedTransaction>) -> Self {
         Self {
             trans: trans.clone(),
         }
     }
 
-    pub fn add_tran(&mut self, tran: Transaction) {
+    pub fn add_tran(&mut self, tran: SignedTransaction) {
         self.trans.push(tran);
     }
 
@@ -170,30 +182,20 @@ impl Content {
         let tree = MerkleTree::new(&self.trans);
         tree.root()
     }
-}
 
-// Generate 32-bytes array to set difficulty
-pub fn gen_difficulty_array(mut zero_cnt: i32) -> [u8; 32] {
-    let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
-
-    for i in 0..32 {
-        if zero_cnt <= 0 {break}
-
-        if zero_cnt < 8 {
-            difficulty[i] = 0xffu8 >> zero_cnt;
-        } else {
-            difficulty[i] = 0u8;
-        }
-        zero_cnt -= 8;
+    // Return a vector of hash for all transactions inside
+    pub fn get_trans_hashes(&self) -> Vec<H256> {
+        let hashes: Vec<H256> = self.trans.iter()
+            .map(|t|t.hash).collect();
+        hashes
     }
-    difficulty
 }
 
 #[cfg(any(test, test_utilities))]
 pub mod test {
     use super::*;
     use crate::crypto::hash::H256;
-    use crate::random_generator::*;
+    use crate::helper::*;
 
     #[test]
     fn test_genesis() {
@@ -207,9 +209,9 @@ pub mod test {
 
     #[test]
     fn test_content_new_with_trans() {
-        let mut trans = Vec::<Transaction>::new();
+        let mut trans = Vec::<SignedTransaction>::new();
         for _ in 0..3 {
-            trans.push(generate_random_transaction());
+            trans.push(generate_random_signed_transaction());
         }
         let _content = Content::new_with_trans(&trans);
     }
@@ -267,5 +269,17 @@ pub mod test {
         assert_ne!(block_1, block_4);
         // same
         assert_eq!(block_1, block_5);
+    }
+
+    #[test]
+    fn test_get_trans_hashed() {
+        let t_1 = generate_random_signed_transaction();
+        let t_2 = generate_random_signed_transaction();
+        let t_3 = generate_random_signed_transaction();
+        let content = Content::new_with_trans(&vec![t_1.clone(), t_2.clone(), t_3.clone()]);
+        let res = content.get_trans_hashes();
+        assert_eq!(t_1.hash, res[0]);
+        assert_eq!(t_2.hash, res[1]);
+        assert_eq!(t_3.hash, res[2]);
     }
 }

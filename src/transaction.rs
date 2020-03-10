@@ -5,18 +5,19 @@ use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm,
 
 use crate::crypto::hash::{Hashable, H256, H160};
 
-///UTXO model transaction (Todo: coin-based tx?)
+///UTXO model transaction
+#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
+pub struct SignedTransaction {
+    pub transaction: Transaction,
+    pub hash: H256,
+    pub signature: Box<[u8]>,
+    pub public_key: Box<[u8]>,
+}
+
 #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
     pub inputs: Vec<TxInput>,
     pub outputs: Vec<TxOutput>,
-}
-
-#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
-pub struct SignedTransaction {
-    pub transaction: Transaction,
-    pub signature: Box<[u8]>,
-    pub public_key: Box<[u8]>,
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
@@ -31,10 +32,30 @@ pub struct TxOutput {
     pub val: u64,        // Number of coin to transfer
 }
 
+impl Hashable for SignedTransaction {
+    fn hash(&self) -> H256 { self.hash.clone() }
+}
+
 impl Hashable for Transaction {
     fn hash(&self) -> H256 {
         let serialized = bincode::serialize(self).unwrap();
         digest::digest(&digest::SHA256, serialized.as_ref()).into()
+    }
+}
+
+impl SignedTransaction {
+    pub fn new(transaction: Transaction, signature: Box<[u8]>, public_key: Box<[u8]>) -> Self {
+        Self {
+            transaction: transaction.clone(),
+            hash: transaction.hash(),
+            signature,
+            public_key,
+        }
+    }
+
+    // Call verify directly
+    pub fn sign_check(&self) -> bool {
+        verify(&self.transaction, self.public_key.as_ref(), self.signature.as_ref())
     }
 }
 
@@ -62,6 +83,7 @@ pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
     key.sign(bytes.as_ref())
 }
 
+/// Verify digital signature of a transaction, using public key instead of secret key (with bytes)
 pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
     let bytes = bincode::serialize(&t).unwrap();
     let msg = untrusted::Input::from(bytes.as_ref());
@@ -89,7 +111,7 @@ pub fn verify_with_origin_type(t: &Transaction, public_key: &<Ed25519KeyPair as 
 pub mod tests {
     use super::*;
     use crate::crypto::key_pair;
-    use crate::random_generator::*;
+    use crate::helper::*;
 
     #[test]
     fn test_sign_verify() {
@@ -107,9 +129,9 @@ pub mod tests {
         let key_bytes: Box<[u8]> = key.public_key().as_ref().into();
         let sig_bytes_2: Box<[u8]> = signature_2.as_ref().into();
         let key_bytes_2: Box<[u8]> = key_2.public_key().as_ref().into();
-        let st = SignedTransaction{transaction: t.clone(), signature: sig_bytes.clone(), public_key: key_bytes.clone()};
+        let st = SignedTransaction::new(t.clone(), sig_bytes.clone(), key_bytes.clone());
         // SignedTransaction with fake signature
-        let st_2 = SignedTransaction{transaction: t.clone(), signature: sig_bytes_2.clone(), public_key: key_bytes.clone()};
+        let st_2 = SignedTransaction::new(t.clone(), sig_bytes_2.clone(), key_bytes.clone());
 
         assert_eq!(t.clone().inputs, st.clone().transaction.inputs);
         assert_eq!(t.clone().outputs, st.clone().transaction.outputs);

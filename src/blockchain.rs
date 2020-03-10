@@ -108,16 +108,15 @@ impl Blockchain {
         Some(cur.clone())
     }
 
-    // Perform validation checks on PoW & difficulty
+    // Perform validation checks on PoW & difficulty & all transactions within it
     pub fn validate_block(&self, block: &Block) -> bool {
         // check difficulty
         if block.header.difficulty != self.difficulty {
             return false;
         }
-
         // check proof of work
         let header_hash = block.header.hash();
-        if header_hash == block.hash && header_hash < self.difficulty {
+        if header_hash == block.hash && header_hash < self.difficulty && block.validate_trans() {
             return true;
         }
         return false;
@@ -231,8 +230,7 @@ impl Blockchain {
 mod tests {
     use super::*;
     use crate::crypto::hash::Hashable;
-    use crate::block;
-    use crate::random_generator::*;
+    use crate::helper::*;
 
     #[test]
     fn insert_one() {
@@ -560,18 +558,18 @@ mod tests {
     fn test_validate_block() {
         let mut blockchain = Blockchain::new();
         let genesis_hash = blockchain.tip();
-        let difficulty: H256 = block::gen_difficulty_array(0).into();
+        let difficulty: H256 = gen_difficulty_array(0).into();
         blockchain.change_difficulty(&difficulty);
         let mut block = generate_block(&genesis_hash, 40, &difficulty);
         assert!(blockchain.validate_block(&block));
 
         // Hash Validate
-        let hash: H256 = block::gen_difficulty_array(20).into();
+        let hash: H256 = gen_difficulty_array(20).into();
         block.change_hash(&hash);
         assert!(!blockchain.validate_block(&block));
 
         //POW validate
-        let difficulty: H256 = block::gen_difficulty_array(20).into();
+        let difficulty: H256 = gen_difficulty_array(20).into();
         blockchain.change_difficulty(&difficulty);
         let block = generate_block(&genesis_hash, 1, &difficulty);
         assert!(!blockchain.validate_block(&block));

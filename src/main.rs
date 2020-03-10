@@ -13,7 +13,9 @@ pub mod miner;
 pub mod network;
 pub mod transaction;
 pub mod config;
-pub mod random_generator;
+pub mod helper;
+pub mod mempool;
+pub mod transaction_generator;
 
 use clap::clap_app;
 use crossbeam::channel;
@@ -27,6 +29,7 @@ use std::sync::{Arc, Mutex};
 use std::time;
 
 use crate::blockchain::Blockchain;
+use crate::mempool::MemPool;
 
 fn main() {
     // parse command line arguments
@@ -85,12 +88,23 @@ fn main() {
     // create blockchain
     let blockchain = Arc::new(Mutex::new(Blockchain::new()));
 
+    // create mempool
+    let mempool = Arc::new(Mutex::new(MemPool::new()));
+
+    // start the transaction_generator
+    let transaction_generator_ctx = transaction_generator::new(
+        &server,
+        &mempool,
+    );
+    transaction_generator_ctx.start();
+
     // start server worker
     let worker_ctx = worker::new(
         p2p_workers,
         msg_rx,
         &server,
         &blockchain,
+        &mempool,
     );
     worker_ctx.start();
 
@@ -98,6 +112,7 @@ fn main() {
     let (miner_ctx, miner) = miner::new(
         &server,
         &blockchain,
+        &mempool,
     );
     miner_ctx.start();
 

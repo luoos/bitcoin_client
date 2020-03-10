@@ -1,9 +1,12 @@
 use crate::transaction::*;
 use crate::block::*;
 use crate::crypto::hash::{H256, H160};
+use crate::crypto::key_pair;
 
+//use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 use rand::{Rng,thread_rng};
 use rand::distributions::Distribution;
+use ring::signature::KeyPair;
 
 ///Block
 pub fn generate_random_block(parent: &H256) -> Block {
@@ -29,7 +32,7 @@ pub fn generate_random_content() -> Content {
     let mut rng = rand::thread_rng();
     let size: u32 = rng.gen_range(10, 20);
     for _ in 0..size {
-        content.add_tran(generate_random_transaction());
+        content.add_tran(generate_random_signed_transaction());
     }
     content
 }
@@ -53,12 +56,20 @@ pub fn generate_header(parent: &H256, content: &Content, nonce: u32,
 
 fn generate_content() -> Content {
     let mut content = Content::new();
-    let tran = generate_random_transaction();
+    let tran = generate_random_signed_transaction();
     content.add_tran(tran);
     content
 }
 
 /// Transaction
+pub fn generate_random_signed_transaction() -> SignedTransaction {
+    let transaction = generate_random_transaction();
+    let key = key_pair::random();
+    let public_key: Box<[u8]> = key.public_key().as_ref().into();
+    let signature: Box<[u8]> = sign(&transaction, &key).as_ref().into();
+    SignedTransaction::new(transaction, signature, public_key)
+}
+
 pub fn generate_random_transaction() -> Transaction {
     let mut inputs = Vec::<TxInput>::new();
     let mut outputs = Vec::<TxOutput>::new();
@@ -99,6 +110,23 @@ pub fn generate_random_h160() -> H160 {
 }
 
 ///Other
+// Generate 32-bytes array to set difficulty
+pub fn gen_difficulty_array(mut zero_cnt: i32) -> [u8; 32] {
+    let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
+
+    for i in 0..32 {
+        if zero_cnt <= 0 {break}
+
+        if zero_cnt < 8 {
+            difficulty[i] = 0xffu8 >> zero_cnt;
+        } else {
+            difficulty[i] = 0u8;
+        }
+        zero_cnt -= 8;
+    }
+    difficulty
+}
+
 #[allow(dead_code)]
 pub fn generate_random_str() -> String {
     let rng = thread_rng();
