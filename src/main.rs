@@ -5,6 +5,7 @@ extern crate hex_literal;
 #[macro_use]
 extern crate lazy_static;
 
+pub mod account;
 pub mod api;
 pub mod block;
 pub mod blockchain;
@@ -16,6 +17,7 @@ pub mod config;
 pub mod helper;
 pub mod mempool;
 pub mod transaction_generator;
+pub mod peers;
 
 use clap::clap_app;
 use crossbeam::channel;

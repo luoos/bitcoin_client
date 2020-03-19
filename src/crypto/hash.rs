@@ -162,6 +162,14 @@ impl std::convert::From<&H160> for [u8; 20] {
     }
 }
 
+impl std::convert::From<H256> for H160 {
+    fn from(input: H256) -> H160 {
+        let mut buffer: [u8; 20] = [0; 20];
+        buffer[..].copy_from_slice(&input.0[12..32]);
+        H160(buffer)
+    }
+}
+
 impl std::convert::From<[u8; 20]> for H160 {
     fn from(input: [u8; 20]) -> H160 {
         H160(input)
@@ -174,7 +182,56 @@ impl std::convert::From<H160> for [u8; 20] {
     }
 }
 
+impl std::convert::From<ring::digest::Digest> for H160 {
+    fn from(input: ring::digest::Digest) -> H160 {
+        let h256: H256 = input.into();
+        h256.into()
+    }
+}
+
+impl Ord for H160 {
+    fn cmp(&self, other: &H160) -> std::cmp::Ordering {
+        let self_higher = u128::from_be_bytes(self.0[0..16].try_into().unwrap());
+        let self_lower = u128::from_be_bytes(self.0[16..20].try_into().unwrap());
+        let other_higher = u128::from_be_bytes(other.0[0..16].try_into().unwrap());
+        let other_lower = u128::from_be_bytes(other.0[16..20].try_into().unwrap());
+        let higher = self_higher.cmp(&other_higher);
+        match higher {
+            std::cmp::Ordering::Equal => self_lower.cmp(&other_lower),
+            _ => higher,
+        }
+    }
+}
+
+impl PartialOrd for H160 {
+    fn partial_cmp(&self, other: &H160) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 #[cfg(any(test, test_utilities))]
 pub mod tests {
+    use ring;
+    use super::*;
 
+    #[test]
+    fn test_convert_h256_to_h160() {
+        let mut arr: [u8; 32] = [0; 32];
+        for i in 0..32 {
+            arr[i] = i as u8;
+        }
+        let h256: H256 = arr.into();
+        let h160: H160 = h256.into();
+        assert_eq!(12, h160.0[0]);
+        assert_eq!(31, h160.0[19]);
+    }
+
+    #[test]
+    fn test_convert_digest_to_h160() {
+        let h256: H256 = hex!("0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d0a0b0c0d0e0f0e0d").into();
+        let h160: H160 = ring::digest::digest(&ring::digest::SHA256, h256.as_ref()).into();
+        assert_eq!(24, h160.0[0]);
+        assert_eq!(81, h160.0[1]);
+        assert_eq!(160, h160.0[19]);
+    }
 }
