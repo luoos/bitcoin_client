@@ -11,3 +11,5 @@ pub static TRANSACTION_GENERATE_INTERVAL: u64 = 2000; // time interval(ms) to ad
 pub static TEST_DIF: i32 = 4; // difficulty used for mod test
 
 pub static EASIEST_DIF: i32 = 0; // all-1-difficulty
+
+pub static COINBASE_REWARD: u64 = 50; // reward for miner

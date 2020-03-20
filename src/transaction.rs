@@ -4,6 +4,7 @@ use ring::digest;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 
 use crate::crypto::hash::{Hashable, H256, H160};
+use crate::config::COINBASE_REWARD;
 
 ///UTXO model transaction
 #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
@@ -57,6 +58,29 @@ impl SignedTransaction {
     pub fn sign_check(&self) -> bool {
         verify(&self.transaction, self.public_key.as_ref(), self.signature.as_ref())
     }
+
+    pub fn sender_addr(&self) -> H160 {
+        digest::digest(&digest::SHA256, &self.public_key).into()
+    }
+
+    pub fn is_coinbase_tran(&self) -> bool {
+        // check length
+        if self.transaction.inputs.len() > 0 ||
+           self.transaction.outputs.len() != 1 {
+            return false;
+        }
+        // check value
+        let output = self.transaction.outputs[0].clone();
+        if output.val != COINBASE_REWARD {
+            return false;
+        }
+        // match address with public_key
+        let addr: H160 = digest::digest(&digest::SHA256, &self.public_key).into();
+        if addr != output.rec_address {
+            return false;
+        }
+        true
+    }
 }
 
 impl TxInput {
@@ -109,9 +133,12 @@ pub fn verify_with_origin_type(t: &Transaction, public_key: &<Ed25519KeyPair as 
 
 #[cfg(any(test, test_utilities))]
 pub mod tests {
+    use ring::digest;
+
     use super::*;
     use crate::crypto::key_pair;
     use crate::helper::*;
+    use crate::config::COINBASE_REWARD;
 
     #[test]
     fn test_sign_verify() {
@@ -141,6 +168,64 @@ pub mod tests {
         assert!(!verify(&st.transaction.clone(), st.public_key.clone().as_ref(), st_2.signature.clone().as_ref()));
         assert!(!verify(&st.transaction.clone(), key_bytes_2.clone().as_ref(), st.signature.clone().as_ref()));
         assert!(!verify(&t_2.clone(), st.public_key.clone().as_ref(), st.signature.clone().as_ref()));
+    }
+
+    #[test]
+    fn test_sender_address() {
+        let tran = Transaction {inputs: Vec::new(), outputs: Vec::new()};
+        let sig_bytes: Box<[u8]> = Box::new(hex!("1001"));
+        let public_key_bytes: Box<[u8]> = Box::new(hex!("0301010101010101010101010101010101010101010101010101010101010202"));
+        let signed_tran = SignedTransaction::new(tran, sig_bytes.clone(), public_key_bytes.clone());
+        let h160: H160 = hex!("41180db4e91a952f2803b24ab2b655f559b683a0").into();
+        assert_eq!(h160, signed_tran.sender_addr());
+    }
+
+    #[test]
+    fn test_verify_coinbase_tran() {
+        let key = key_pair::random();
+
+        // right coinbase tran
+        let h160: H160 = digest::digest(&digest::SHA256, key.public_key().as_ref()).into();
+        let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD};
+        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput]};
+
+        let signature = sign(&coinbase_tran, &key);
+        let sig_bytes: Box<[u8]> = signature.as_ref().into();
+        let key_bytes: Box<[u8]> = key.public_key().as_ref().into();
+
+        let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
+        assert!(signed_tran.is_coinbase_tran());
+
+        // wrong rec_address
+        let txoutput = TxOutput {rec_address: generate_random_h160(), val: COINBASE_REWARD};
+        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput]};
+        let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
+        assert!(!signed_tran.is_coinbase_tran());
+
+        // wrong txinput length
+        let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD};
+        let txinput = TxInput {pre_hash: generate_random_hash(), index: 1};
+        let coinbase_tran = Transaction {inputs: vec![txinput], outputs: vec![txoutput]};
+        let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
+        assert!(!signed_tran.is_coinbase_tran());
+
+        // wrong reward
+        let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD+1};
+        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput]};
+        let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
+        assert!(!signed_tran.is_coinbase_tran());
+
+        // wrong txoutput length - 0
+        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: Vec::new()};
+        let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
+        assert!(!signed_tran.is_coinbase_tran());
+
+        // wrong txoutput length - 2
+        let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD};
+        let txoutput2 = TxOutput {rec_address: generate_random_h160(), val: COINBASE_REWARD};
+        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput, txoutput2]};
+        let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
+        assert!(!signed_tran.is_coinbase_tran());
     }
 
     #[test]
