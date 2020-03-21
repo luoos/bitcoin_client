@@ -5,7 +5,7 @@ use chrono::prelude::DateTime;
 use chrono::Utc;
 use std::time::{UNIX_EPOCH, Duration};
 use crate::crypto::hash::{H256, Hashable};
-use crate::transaction::SignedTransaction;
+use crate::transaction::{SignedTransaction, PrintableTransaction};
 use crate::crypto::merkle::MerkleTree;
 use crate::config::DIFFICULTY;
 use crate::helper::gen_difficulty_array;
@@ -41,6 +41,11 @@ pub struct Header {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Content {
     pub trans: Vec<SignedTransaction>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrintableContent {
+    pub trans: Vec<PrintableTransaction>
 }
 
 impl Hashable for Block {
@@ -188,6 +193,18 @@ impl Content {
         let hashes: Vec<H256> = self.trans.iter()
             .map(|t|t.hash).collect();
         hashes
+    }
+}
+
+impl PrintableContent {
+    pub fn from_content_vec(contents: &Vec<Content>) -> Vec<Self> {
+        let mut pcontents = Vec::<Self>::new();
+        for c in contents {
+            let pts = PrintableTransaction::from_signedtx_vec(&c.trans);
+            let pc = Self { trans: pts };
+            pcontents.push(pc);
+        }
+        pcontents
     }
 }
 

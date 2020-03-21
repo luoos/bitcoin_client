@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% block head %}
+        <title>{% block title %} {% endblock title %} Blocks in blockchain Visualization</title>
+        <style type="text/css">
+            li {
+                font: 18px/1 Tahoma,Helvetica,Arial,"\5b8b\4f53",sans-serif;
+            }
+        </style>
+        {% endblock head %}
+    </head>
+    <body>
+        {% for b in blocks %}
+        <h3>Block: {{ b.index }}</h3>
+        <ul>
+            <li><strong>Hash</strong>: {{ b.hash }}</li>
+            <li><strong>Parent</strong>: {{ b.parent_hash }}</li>
+            <li><strong>Difficulty</strong>: {{ b.difficulty }}</li>
+            <li><strong>Merkle_root</strong>: {{ b.merkle_root }}</li>
+            <li><strong>Nonce</strong>: {{ b.nonce }}</li>
+            <li><strong>Timestamp</strong>: {{ b.timestamp }}</li>
+        </ul>
+        {% endfor %}
+    </body>
+</html>

@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use ring::digest;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 use std::time::SystemTime;
+use std::str;
 
 use crate::crypto::hash::{Hashable, H256, H160};
 use crate::config::COINBASE_REWARD;
@@ -23,6 +24,15 @@ pub struct Transaction {
     ts: u64,  // timestamp to avoid same hash
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PrintableTransaction {
+    pub hash: String,
+    pub signature: String,
+    pub public_key: String,
+    pub inputs: Vec<PrintableTxInput>,
+    pub outputs: Vec<PrintableTxOutput>,
+}
+
 #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
 pub struct TxInput {
     pub pre_hash: H256, // Hash of previous transaction
@@ -33,6 +43,18 @@ pub struct TxInput {
 pub struct TxOutput {
     pub rec_address: H160, // Recipient's address
     pub val: u64,        // Number of coin to transfer
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrintableTxInput {
+    pub pre_hash: String,
+    pub index: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrintableTxOutput {
+    pub rec_address: String,
+    pub val: u64,
 }
 
 impl Hashable for SignedTransaction {
@@ -90,6 +112,47 @@ impl SignedTransaction {
             return false;
         }
         true
+    }
+}
+
+impl PrintableTransaction {
+    pub fn from_signedtx_vec(txs: &Vec<SignedTransaction>) -> Vec<Self> {
+        let mut ptxs = Vec::<Self>::new();
+        for tx in txs {
+
+            let signature = hex::encode(tx.signature.as_ref());
+            let public_key = hex::encode(tx.public_key.as_ref());
+            let inputs = PrintableTransaction::txinput_to_string_vec(&tx.transaction.inputs);
+            let outputs = PrintableTransaction::txoutput_to_string_vec(&tx.transaction.outputs);
+
+            let p = Self {
+                hash: hex::encode(&tx.hash),
+                signature,
+                public_key,
+                inputs,
+                outputs,
+            };
+            ptxs.push(p);
+        }
+        ptxs
+    }
+
+    pub fn txinput_to_string_vec(inputs: &Vec<TxInput>) -> Vec<PrintableTxInput> {
+        let mut pinputs = Vec::new();
+        for i in inputs {
+            let pre_hash = hex::encode(i.pre_hash);
+            pinputs.push(PrintableTxInput{ pre_hash, index: i.index});
+        }
+        pinputs
+    }
+
+    pub fn txoutput_to_string_vec(outputs: &Vec<TxOutput>) -> Vec<PrintableTxOutput> {
+        let mut poutputs = Vec::new();
+        for o in outputs {
+            let rec_address = hex::encode(o.rec_address);
+            poutputs.push(PrintableTxOutput{ rec_address, val: o.val});
+        }
+        poutputs
     }
 }
 

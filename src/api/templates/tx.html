@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        {% block head %}
+        <title>{% block title %} {% endblock title %} Transactions in blockchain Visualization</title>
+        <style type="text/css">
+            li {
+                font: 18px/1 Tahoma,Helvetica,Arial,"\5b8b\4f53",sans-serif;
+            }
+        </style>
+        {% endblock head %}
+    </head>
+    <body>
+        {% for c in contents %}
+        <h2>Block Index: {{ loop.index0 }}</h2>
+            {% for t in c.trans %}
+            <h3>Transaction Index: {{ loop.index0 }}</h3>
+            <ul>
+                <li><strong>Hash</strong>: {{ t.hash }}</li>
+                <li><strong>Signature</strong>: {{ t.signature }}</li>
+                <li><strong>Public_key</strong>: {{ t.public_key }}</li>
+                <li><strong>Intputs</strong>:
+                    {% for i in t.inputs %}
+                    <ul>
+                        <li><strong>Pre_hash</strong>: {{ i.pre_hash }},  <strong>Index</strong>: {{ i.index }}</li>
+                    </ul>
+                    {% endfor %}
+                </li>
+                <li><strong>Outputs</strong>:
+                    {% for o in t.outputs %}
+                    <ul>
+                        <li><strong>Receiver_Address</strong>: {{ o.rec_address }},  <strong>Value</strong>: {{ o.val }}</li>
+                    </ul>
+                    {% endfor %}
+                </li>
+            </ul>
+            {% endfor %}
+        {% endfor %}
+    </body>
+</html>

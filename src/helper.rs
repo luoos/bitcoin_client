@@ -2,8 +2,8 @@ use crate::transaction::*;
 use crate::block::*;
 use crate::crypto::hash::{H256, H160};
 use crate::crypto::key_pair;
+use crate::config::{RAND_INPUTS_NUM, RAND_OUTPUTS_NUM};
 
-//use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
 use rand::{Rng,thread_rng};
 use rand::distributions::Distribution;
 use ring::signature::KeyPair;
@@ -73,8 +73,12 @@ pub fn generate_random_signed_transaction() -> SignedTransaction {
 pub fn generate_random_transaction() -> Transaction {
     let mut inputs = Vec::<TxInput>::new();
     let mut outputs = Vec::<TxOutput>::new();
-    inputs.push(generate_random_txinput());
-    outputs.push(generate_random_txoutput());
+    for _ in 0..RAND_INPUTS_NUM {
+        inputs.push(generate_random_txinput());
+    }
+    for _ in 0..RAND_OUTPUTS_NUM {
+        outputs.push(generate_random_txoutput());
+    }
     Transaction::new(inputs, outputs)
 }
 

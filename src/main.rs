@@ -157,6 +157,7 @@ fn main() {
         &miner,
         &server,
         &blockchain,
+        &mempool,
     );
 
     loop {

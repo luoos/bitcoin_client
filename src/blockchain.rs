@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use log::info;
 
-use crate::block::{Block, Header};
+use crate::block::{Block, Header, Content};
 use crate::crypto::hash::H256;
 
 pub struct Blockchain {
@@ -197,6 +197,15 @@ impl Blockchain {
                 .map(|h| self.get_block(h).unwrap().clone())
                 .collect();
         block_chain
+    }
+
+    // Get a vector of contents in longest-chain from tip to genesis
+    pub fn content_chain(&self) -> Vec<Content> {
+        let hash_chain = self.hash_chain();
+        let content_chain = hash_chain.iter()
+                .map(|h| self.get_block(h).unwrap().content)
+                .collect();
+        content_chain
     }
 
     #[cfg(any(test, test_utilities))]

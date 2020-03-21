@@ -3,7 +3,8 @@ use crate::miner::Handle as MinerHandle;
 use crate::network::server::Handle as NetworkServerHandle;
 use crate::network::message::Message;
 use crate::blockchain::Blockchain;
-use crate::block::{PrintableBlock};
+use crate::block::{PrintableBlock, PrintableContent};
+use crate::mempool::MemPool;
 
 use log::info;
 use std::collections::HashMap;
@@ -14,12 +15,14 @@ use tiny_http::Server as HTTPServer;
 use url::Url;
 use tera::{Tera, Context};
 use std::sync::{Arc, Mutex};
+use crate::transaction::{PrintableTransaction, SignedTransaction};
 
 pub struct Server {
     handle: HTTPServer,
     miner: MinerHandle,
     network: NetworkServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
+    mempool: Arc<Mutex<MemPool>>,
 }
 
 #[derive(Serialize)]
@@ -62,6 +65,7 @@ impl Server {
         miner: &MinerHandle,
         network: &NetworkServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
+        mempool: &Arc<Mutex<MemPool>>,
     ) {
         let handle = HTTPServer::http(&addr).unwrap();
         let server = Self {
@@ -69,12 +73,14 @@ impl Server {
             miner: miner.clone(),
             network: network.clone(),
             blockchain: Arc::clone(blockchain),
+            mempool: Arc::clone(mempool),
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
                 let miner = server.miner.clone();
                 let network = server.network.clone();
                 let blockchain = Arc::clone(&server.blockchain);
+                let mempool = Arc::clone(&server.mempool);
                 thread::spawn(move || {
                     // a valid url requires a base
                     let base_url = Url::parse(&format!("http://{}/", &addr)).unwrap();
@@ -122,14 +128,40 @@ impl Server {
                             network.broadcast(Message::Ping(String::from("Test ping")));
                             respond_json!(req, true, "ok");
                         }
-                        "/blockchain/show" => {
+                        "/blockchain/showblock" => {
                             let blocks = blockchain.lock().unwrap().block_chain();
                             let pblock = PrintableBlock::from_block_vec(&blocks);
                             let mut context = Context::new();
                             context.insert("blocks", &pblock);
 
                             let content_type = "Content-Type: text/html".parse::<Header>().unwrap();
-                            let html = TEMPLATES.render("debug.html", &context).unwrap();
+                            let html = TEMPLATES.render("block.html", &context).unwrap();
+                            let resp = Response::from_string(html)
+                                .with_header(content_type);
+                            req.respond(resp).unwrap();
+                        }
+                        "/blockchain/showtx" => {
+                            let contents = blockchain.lock().unwrap().content_chain();
+                            let pcontent = PrintableContent::from_content_vec(&contents);
+                            let mut context = Context::new();
+                            context.insert("contents", &pcontent);
+
+                            let content_type = "Content-Type: text/html".parse::<Header>().unwrap();
+                            let html = TEMPLATES.render("tx.html", &context).unwrap();
+                            let resp = Response::from_string(html)
+                                .with_header(content_type);
+                            req.respond(resp).unwrap();
+                        }
+                        "/mempool/showtx" => {
+                            let trans_map = &mempool.lock().unwrap().transactions;
+                            let trans: Vec<SignedTransaction> = trans_map.values().cloned().collect();
+                            let ptrans = PrintableTransaction::from_signedtx_vec(&trans);
+                            let mut context = Context::new();
+                            context.insert("txs", &ptrans);
+                            context.insert("size", &ptrans.len());
+
+                            let content_type = "Content-Type: text/html".parse::<Header>().unwrap();
+                            let html = TEMPLATES.render("mempool.html", &context).unwrap();
                             let resp = Response::from_string(html)
                                 .with_header(content_type);
                             req.respond(resp).unwrap();

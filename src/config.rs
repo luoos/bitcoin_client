@@ -13,3 +13,7 @@ pub static TEST_DIF: i32 = 4; // difficulty used for mod test
 pub static EASIEST_DIF: i32 = 0; // all-1-difficulty
 
 pub static COINBASE_REWARD: u64 = 50; // reward for miner
+
+pub static RAND_INPUTS_NUM: usize = 4; // number of inputs in generate_random_txinput
+
+pub static RAND_OUTPUTS_NUM: usize = 4; // number of outputs in generate_random_txoutput

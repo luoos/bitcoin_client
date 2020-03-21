@@ -146,6 +146,12 @@ impl std::fmt::Debug for H160 {
     }
 }
 
+impl std::convert::AsRef<[u8]> for H160 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl std::convert::From<&[u8; 20]> for H160 {
     fn from(input: &[u8; 20]) -> H160 {
         let mut buffer: [u8; 20] = [0; 20];
