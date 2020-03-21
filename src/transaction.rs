@@ -2,6 +2,7 @@ use bincode;
 use serde::{Serialize, Deserialize};
 use ring::digest;
 use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
+use std::time::SystemTime;
 
 use crate::crypto::hash::{Hashable, H256, H160};
 use crate::config::COINBASE_REWARD;
@@ -19,6 +20,7 @@ pub struct SignedTransaction {
 pub struct Transaction {
     pub inputs: Vec<TxInput>,
     pub outputs: Vec<TxOutput>,
+    ts: u64,  // timestamp to avoid same hash
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
@@ -44,13 +46,21 @@ impl Hashable for Transaction {
     }
 }
 
+impl Transaction {
+    pub fn new(inputs: Vec<TxInput>, outputs: Vec<TxOutput>) -> Self {
+        let ts = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap().as_millis() as u64;
+        Self {inputs: inputs, outputs: outputs, ts: ts}
+    }
+}
+
 impl SignedTransaction {
     pub fn new(transaction: Transaction, signature: Box<[u8]>, public_key: Box<[u8]>) -> Self {
         Self {
-            transaction: transaction.clone(),
             hash: transaction.hash(),
-            signature,
-            public_key,
+            transaction: transaction,
+            signature: signature,
+            public_key: public_key,
         }
     }
 
@@ -172,7 +182,7 @@ pub mod tests {
 
     #[test]
     fn test_sender_address() {
-        let tran = Transaction {inputs: Vec::new(), outputs: Vec::new()};
+        let tran = Transaction::new(Vec::new(), Vec::new());
         let sig_bytes: Box<[u8]> = Box::new(hex!("1001"));
         let public_key_bytes: Box<[u8]> = Box::new(hex!("0301010101010101010101010101010101010101010101010101010101010202"));
         let signed_tran = SignedTransaction::new(tran, sig_bytes.clone(), public_key_bytes.clone());
@@ -187,7 +197,7 @@ pub mod tests {
         // right coinbase tran
         let h160: H160 = digest::digest(&digest::SHA256, key.public_key().as_ref()).into();
         let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD};
-        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput]};
+        let coinbase_tran = Transaction::new(Vec::new(), vec![txoutput]);
 
         let signature = sign(&coinbase_tran, &key);
         let sig_bytes: Box<[u8]> = signature.as_ref().into();
@@ -198,32 +208,32 @@ pub mod tests {
 
         // wrong rec_address
         let txoutput = TxOutput {rec_address: generate_random_h160(), val: COINBASE_REWARD};
-        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput]};
+        let coinbase_tran = Transaction::new(Vec::new(), vec![txoutput]);
         let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
         assert!(!signed_tran.is_coinbase_tran());
 
         // wrong txinput length
         let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD};
         let txinput = TxInput {pre_hash: generate_random_hash(), index: 1};
-        let coinbase_tran = Transaction {inputs: vec![txinput], outputs: vec![txoutput]};
+        let coinbase_tran = Transaction::new(vec![txinput], vec![txoutput]);
         let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
         assert!(!signed_tran.is_coinbase_tran());
 
         // wrong reward
         let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD+1};
-        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput]};
+        let coinbase_tran = Transaction::new(Vec::new(), vec![txoutput]);
         let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
         assert!(!signed_tran.is_coinbase_tran());
 
         // wrong txoutput length - 0
-        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: Vec::new()};
+        let coinbase_tran = Transaction::new(Vec::new(), Vec::new());
         let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
         assert!(!signed_tran.is_coinbase_tran());
 
         // wrong txoutput length - 2
         let txoutput = TxOutput {rec_address: h160.clone(), val: COINBASE_REWARD};
         let txoutput2 = TxOutput {rec_address: generate_random_h160(), val: COINBASE_REWARD};
-        let coinbase_tran = Transaction {inputs: Vec::new(), outputs: vec![txoutput, txoutput2]};
+        let coinbase_tran = Transaction::new(Vec::new(), vec![txoutput, txoutput2]);
         let signed_tran = SignedTransaction::new(coinbase_tran.clone(), sig_bytes.clone(), key_bytes.clone());
         assert!(!signed_tran.is_coinbase_tran());
     }

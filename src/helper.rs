@@ -75,7 +75,7 @@ pub fn generate_random_transaction() -> Transaction {
     let mut outputs = Vec::<TxOutput>::new();
     inputs.push(generate_random_txinput());
     outputs.push(generate_random_txoutput());
-    Transaction {inputs, outputs}
+    Transaction::new(inputs, outputs)
 }
 
 pub fn generate_random_txinput() -> TxInput {
