@@ -138,6 +138,7 @@ impl Block {
         true
     }
 
+    // Try to generate a new state based on the parent_state
     // Validate all transactions, such as coinbase transaction and double-spend issue
     // return None if any check fails
     pub fn try_generate_state(&self, parent_state: &State) -> Option<State> {

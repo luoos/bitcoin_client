@@ -8,10 +8,11 @@ use super::message::Message;
 use super::peer;
 use crate::network::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
-use crate::crypto::hash::{H256, Hashable};
+use crate::crypto::hash::{H256, Hashable, H160};
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::block::Block;
 use crate::mempool::MemPool;
+use crate::peers::Peers;
 
 #[derive(Clone)]
 pub struct Context {
@@ -20,6 +21,8 @@ pub struct Context {
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     mempool: Arc<Mutex<MemPool>>,
+    peer_addrs: Arc<Mutex<Peers>>,
+    self_addr: H160,
 }
 
 pub fn new(
@@ -28,6 +31,8 @@ pub fn new(
     server: &ServerHandle,
     blockchain: &Arc<Mutex<Blockchain>>,
     mempool: &Arc<Mutex<MemPool>>,
+    peer_addrs: &Arc<Mutex<Peers>>,
+    self_addr: H160,
 ) -> Context {
     Context {
         msg_chan: msg_src,
@@ -35,6 +40,8 @@ pub fn new(
         server: server.clone(),
         blockchain: Arc::clone(blockchain),
         mempool: Arc::clone(mempool),
+        peer_addrs: Arc::clone(peer_addrs),
+        self_addr,
     }
 }
 
@@ -141,6 +148,42 @@ impl Context {
                     if new_hashes.len() > 0 {
                         self.server.broadcast(Message::NewTransactionHashes(new_hashes));
                     }
+                }
+                Message::NewAddresses(addrs) => {
+                    //Broadcast all known address(including itself) to p2p_peers
+                    debug!("Server {:?} receive address{:?}!!", self.self_addr, addrs);
+                    let mut peer_addrs = self.peer_addrs.lock().unwrap();
+                    let mut new_addrs = Vec::<H160>::new();
+                    for a in addrs.iter() {
+                        if a.clone() != self.self_addr && !peer_addrs.contains(a) {
+                            peer_addrs.insert(a);
+                            new_addrs.push(a.clone());
+                        }
+                    }
+                    if new_addrs.len() > 0 {
+                        self.server.broadcast(Message::NewAddresses(new_addrs));
+                    }
+                }
+                Message::Introduce(addr) => {
+                    /* Welcome new peer joining:
+                       Add new-coming address to peer_addrs & send back all known address(including itself) & broadcast new address to p2p_peers
+                       Sync longest chain to new peer
+                    */
+                    debug!("Server {:?} receive IntroduceAddr {:?}!!", self.self_addr, addr);
+                    let blockchain = self.blockchain.lock().unwrap();
+                    let mut peer_addrs = self.peer_addrs.lock().unwrap();
+
+                    if !peer_addrs.contains(&addr) {
+                        peer_addrs.insert(&addr);
+                        let mut all_addrs = peer_addrs.get_all_peers_addrs();
+                        // Also include self_address
+                        all_addrs.push(self.self_addr);
+                        peer.write(Message::NewAddresses(all_addrs));
+
+                        self.server.broadcast(Message::NewAddresses(vec![addr]));
+                    }
+
+                    peer.write(Message::NewBlockHashes(blockchain.hash_chain()));
                 }
             }
         }

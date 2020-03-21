@@ -225,7 +225,7 @@ impl Context {
 }
 
 // Perforn mining for MINING_STEP here
-fn mining_base(header: &mut Header, difficulty: H256) -> bool {
+pub fn mining_base(header: &mut Header, difficulty: H256) -> bool {
     for _ in 0..MINING_STEP {
         if header.hash() < difficulty {
             return true;
@@ -243,36 +243,19 @@ pub fn get_block_size(block: Block) -> usize {
 
 #[cfg(any(test, test_utilities))]
 pub mod tests {
-    use super::mining_base;
-    use crate::blockchain::Blockchain;
     use crate::miner;
     use crate::crypto::hash::H256;
-    use crate::network::{worker, server};
-    use crate::block::Block;
     use crate::helper::*;
 
-    use log::{error, info};
-    use std::sync::{Arc, Mutex};
     use std::time;
     use std::thread;
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
-    use crossbeam::channel;
-    use crate::mempool::MemPool;
     use crate::config::{BLOCK_SIZE_LIMIT, EASIEST_DIF};
-    use crate::transaction_generator;
-
-    fn gen_mined_block(parent_hash: &H256, difficulty: &H256) -> Block {
-        let content = generate_random_content();
-        let mut header = generate_header(parent_hash, &content, 0, difficulty);
-        // assume a easy difficulty
-        assert!(mining_base(&mut header, difficulty.clone()));
-        Block::new(header, content)
-    }
 
     #[test]
     fn test_miner() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17010);
-        let (_server_handle, mut miner, _, _blockchain, mempool) = new_server_env(p2p_addr_1);
+        let (_server_handle, mut miner, _, _blockchain, mempool, _, _) = new_server_env(p2p_addr_1);
 
         //Must-be-done difficulty
         let mut difficulty: H256 = gen_difficulty_array(0).into();
@@ -306,9 +289,9 @@ pub mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17012);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17013);
 
-        let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1) = new_server_env(p2p_addr_1);
-        let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2) = new_server_env(p2p_addr_2);
-        let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3) = new_server_env(p2p_addr_3);
+        let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1, _, _) = new_server_env(p2p_addr_1);
+        let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2, _, _) = new_server_env(p2p_addr_2);
+        let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3);
         blockchain_1.lock().unwrap().set_check_trans(false);
         blockchain_2.lock().unwrap().set_check_trans(false);
         blockchain_3.lock().unwrap().set_check_trans(false);
@@ -321,7 +304,7 @@ pub mod tests {
 
         let chain_1 = blockchain_1.lock().unwrap();
         let difficulty = chain_1.difficulty();
-        let new_block_1 = gen_mined_block(&chain_1.tip(), &difficulty);
+        let new_block_1 = generate_mined_block(&chain_1.tip(), &difficulty);
         drop(chain_1);
         miner_ctx_1.found(new_block_1);
         thread::sleep(time::Duration::from_millis(100));
@@ -340,7 +323,7 @@ pub mod tests {
         drop(chain_3);
 
         let chain_2 = blockchain_1.lock().unwrap();
-        let new_block_2 = gen_mined_block(&chain_2.tip(), &difficulty);
+        let new_block_2 = generate_mined_block(&chain_2.tip(), &difficulty);
         miner_ctx_2.found(new_block_2);
         drop(chain_2);
         thread::sleep(time::Duration::from_millis(100));
@@ -358,7 +341,7 @@ pub mod tests {
         drop(chain_3);
 
         let chain_3 = blockchain_1.lock().unwrap();
-        let new_block_3 = gen_mined_block(&chain_3.tip(), &difficulty);
+        let new_block_3 = generate_mined_block(&chain_3.tip(), &difficulty);
         miner_ctx_3.found(new_block_3);
         drop(chain_3);
         thread::sleep(time::Duration::from_millis(100));
@@ -380,14 +363,14 @@ pub mod tests {
 
         // test get missing parent
         let mut chain_1 = blockchain_1.lock().unwrap();
-        let new_block_1 = gen_mined_block(&chain_1.tip(), &difficulty);
+        let new_block_1 = generate_mined_block(&chain_1.tip(), &difficulty);
         chain_1.insert(&new_block_1);
         drop(chain_1);
         assert_eq!(5, blockchain_1.lock().unwrap().length());
         assert_eq!(4, blockchain_2.lock().unwrap().length());
         assert_eq!(4, blockchain_3.lock().unwrap().length());
 
-        let new_block_2 = gen_mined_block(&new_block_1.hash, &difficulty);
+        let new_block_2 = generate_mined_block(&new_block_1.hash, &difficulty);
         miner_ctx_1.found(new_block_2);
         thread::sleep(time::Duration::from_millis(100));
         assert_eq!(6, blockchain_1.lock().unwrap().length());
@@ -397,50 +380,11 @@ pub mod tests {
         // test insert_with_check
         let mut chain_1 = blockchain_1.lock().unwrap();
         let wrong_difficulty: H256 = gen_difficulty_array(1).into();
-        let wrong_block = gen_mined_block(&chain_1.tip(), &wrong_difficulty);
+        let wrong_block = generate_mined_block(&chain_1.tip(), &wrong_difficulty);
         assert!(!chain_1.insert_with_check(&wrong_block));
         assert!(!chain_1.insert_with_check(&new_block_1));
         let correct_difficulty: H256 = gen_difficulty_array(EASIEST_DIF).into();
-        let correct_block = gen_mined_block(&chain_1.tip(), &correct_difficulty);
+        let correct_block = generate_mined_block(&chain_1.tip(), &correct_difficulty);
         assert!(chain_1.insert_with_check(&correct_block));
-    }
-
-    pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context, transaction_generator::Context, Arc<Mutex<Blockchain>>, Arc<Mutex<MemPool>>) {
-        let (sender, receiver) = channel::unbounded();
-        let (server_ctx, server) = server::new(ipv4_addr, sender).unwrap();
-        server_ctx.start().unwrap();
-
-        let mut blockchain = Blockchain::new();
-        let difficulty: H256 = gen_difficulty_array(EASIEST_DIF).into();
-        blockchain.change_difficulty(&difficulty);
-        let blockchain =  Arc::new(Mutex::new(blockchain));
-
-        let mempool = MemPool::new();
-        let mempool = Arc::new(Mutex::new(mempool));
-
-        let worker_ctx = worker::new(4, receiver, &server, &blockchain, &mempool);
-        worker_ctx.start();
-
-        let (miner_ctx, _miner) = miner::new(&server, &blockchain, &mempool);
-
-        let transaction_generator_ctx = transaction_generator::new(&server, &mempool);
-
-        (server, miner_ctx, transaction_generator_ctx, blockchain, mempool)
-    }
-
-    pub fn connect_peers(server: &server::Handle, known_peers: Vec<SocketAddr>) {
-        for peer_addr in known_peers {
-            match server.connect(peer_addr) {
-                Ok(_) => {
-                    info!("Connected to outgoing peer {}", &peer_addr);
-                }
-                Err(e) => {
-                    error!(
-                        "Error connecting to peer {}, retrying in one second: {}",
-                        peer_addr, e
-                    );
-                }
-            }
-        }
     }
 }

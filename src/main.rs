@@ -32,6 +32,10 @@ use std::time;
 
 use crate::blockchain::Blockchain;
 use crate::mempool::MemPool;
+use crate::account::Account;
+use crate::peers::Peers;
+use crate::network::message::Message;
+use crate::crypto::key_pair;
 
 fn main() {
     // parse command line arguments
@@ -93,10 +97,19 @@ fn main() {
     // create mempool
     let mempool = Arc::new(Mutex::new(MemPool::new()));
 
+    // create user account
+    let key_pair = key_pair::random();
+    let account = Account::new(key_pair);
+    let addr = account.addr;
+
+    // create peer(for transaction)
+    let peers = Arc::new(Mutex::new(Peers::new()));
+
     // start the transaction_generator
     let transaction_generator_ctx = transaction_generator::new(
         &server,
         &mempool,
+        account.key_pair,
     );
     transaction_generator_ctx.start();
 
@@ -107,6 +120,8 @@ fn main() {
         &server,
         &blockchain,
         &mempool,
+        &peers,
+        account.addr,
     );
     worker_ctx.start();
 
@@ -150,6 +165,9 @@ fn main() {
             }
         });
     }
+
+    // introduce myself to network_peers
+    server.broadcast(Message::Introduce(addr));
 
     // start the API server
     ApiServer::start(

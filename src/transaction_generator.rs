@@ -6,21 +6,23 @@ use log::info;
 use crate::network::server::Handle as ServerHandle;
 use crate::network::message::Message;
 use crate::mempool::MemPool;
-use crate::helper::generate_random_signed_transaction;
+use crate::helper::generate_random_signed_transaction_from_keypair;
 use crate::crypto::hash::Hashable;
 use crate::config::TRANSACTION_GENERATE_INTERVAL;
+use ring::signature::Ed25519KeyPair;
 
-#[derive(Clone)]
 pub struct Context {
     server: ServerHandle,
     mempool: Arc<Mutex<MemPool>>,
+    key_pair: Ed25519KeyPair,
 }
 
 pub fn new(
     server: &ServerHandle,
     mempool: &Arc<Mutex<MemPool>>,
+    key_pair: Ed25519KeyPair,
 ) -> Context {
-    Context {server: server.clone(), mempool: Arc::clone(mempool)}
+    Context {server: server.clone(), mempool: Arc::clone(mempool), key_pair}
 }
 
 impl Context {
@@ -45,7 +47,7 @@ impl Context {
 
     //For now, just call generate_random_signed_transaction
     pub fn generating(&mut self) {
-        let new_t = generate_random_signed_transaction();
+        let new_t = generate_random_signed_transaction_from_keypair(&self.key_pair);
         let mut mempool = self.mempool.lock().unwrap();
         if mempool.add_with_check(&new_t) {
             info!("Generate new transaction with {} input {} output! Now mempool has {} transaction",
@@ -59,7 +61,7 @@ impl Context {
 
 #[cfg(any(test, test_utilities))]
 mod tests {
-    use crate::miner::tests::{new_server_env, connect_peers};
+    use crate::helper::{new_server_env, connect_peers};
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use std::thread::sleep;
     use std::time;
@@ -70,9 +72,9 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17022);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17023);
 
-        let (_server_1, _miner_ctx_1, mut generator_1,  _blockchain_1, mempool_1) = new_server_env(p2p_addr_1);
-        let (server_2, _miner_ctx_2, mut generator_2, _blockchain_2, mempool_2) = new_server_env(p2p_addr_2);
-        let (server_3, _miner_ctx_3, mut generator_3, _blockchain_3, mempool_3) = new_server_env(p2p_addr_3);
+        let (_server_1, _miner_ctx_1, mut generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1);
+        let (server_2, _miner_ctx_2, mut generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2);
+        let (server_3, _miner_ctx_3, mut generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3);
 
         let peers_1 = vec![p2p_addr_1];
         connect_peers(&server_2, peers_1);

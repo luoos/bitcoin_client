@@ -243,7 +243,6 @@ impl Blockchain {
         result
     }
 
-    #[cfg(any(test, test_utilities))]
     pub fn change_difficulty(&mut self, difficulty: &H256) {
         self.difficulty = difficulty.clone();
     }
@@ -266,6 +265,11 @@ mod tests {
     use crate::crypto::hash::Hashable;
     use crate::helper::*;
     use crate::crypto::key_pair;
+    use crate::network::message::Message;
+
+    use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+    use std::time;
+    use std::thread;
 
     #[test]
     fn test_insert() {
@@ -504,6 +508,48 @@ mod tests {
         assert_eq!(None, blockchain.missing_parent(&block3.hash));
         assert_eq!(None, blockchain.missing_parent(&block2.hash));
         assert_eq!(None, blockchain.missing_parent(&block1.hash));
+    }
+
+    #[test]
+    fn test_sync_longest_chain() {
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17051);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17052);
+
+        let (server_1, _, _, blockchain_1, _, _, addr_1) = new_server_env(p2p_addr_1);
+        let (server_2, _, _, blockchain_2, _, _, addr_2) = new_server_env(p2p_addr_2);
+
+        // server_1 online but no connections
+        server_1.broadcast(Message::Introduce(addr_1));
+        thread::sleep(time::Duration::from_millis(100));
+        blockchain_1.lock().unwrap().set_check_trans(false);
+        blockchain_2.lock().unwrap().set_check_trans(false);
+
+        let mut chain_1 = blockchain_1.lock().unwrap();
+        let mut chain_2 = blockchain_2.lock().unwrap();
+
+        let genesis = chain_1.tip();
+        let difficulty = chain_1.difficulty();
+        let block_1 = generate_mined_block(&genesis, &difficulty);
+        chain_1.insert(&block_1);
+        let block_2 = generate_mined_block(&block_1.hash, &difficulty);
+        chain_1.insert(&block_2);
+        drop(chain_1);
+        drop(chain_2);
+
+        // server_2 online & connect to server_1
+        let server_peers_1 = vec![p2p_addr_1];
+        connect_peers(&server_2, server_peers_1.clone());
+        thread::sleep(time::Duration::from_millis(100));
+
+        server_2.broadcast(Message::Introduce(addr_2));
+        thread::sleep(time::Duration::from_millis(100));
+
+        // Check if blockchain is sync
+        chain_1 = blockchain_1.lock().unwrap();
+        chain_2 = blockchain_2.lock().unwrap();
+        assert_eq!(chain_1.length(), chain_2.length());
+        assert!(chain_2.exist(&block_1.hash));
+        assert!(chain_2.exist(&block_2.hash));
     }
 
     #[test]
