@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use log::info;
 
-use crate::block::{Block, Header, Content};
+use crate::block::{Block, Header, Content, State};
 use crate::crypto::hash::H256;
 
 pub struct Blockchain {
@@ -11,17 +11,23 @@ pub struct Blockchain {
     longest_hash: H256,
     max_index: usize,
     difficulty: H256,  // assume difficulty is consistent
+    states: HashMap<H256, State>,
+    check_trans: bool,  // can only be false in test
 }
 
 impl Blockchain {
     // Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
         let genesis = Block::genesis();
+        let genesis_hash = genesis.hash.clone();
         let difficulty = genesis.header.difficulty.clone();
         let longest_hash = genesis.get_hash();
         let mut map: HashMap<H256, Block> = HashMap::new();
         let orphans_map: HashMap<H256, Vec<Block>> = HashMap::new();
         map.insert(genesis.get_hash(), genesis);
+        let mut states: HashMap<H256, State> = HashMap::new();
+        let genesis_state = State::new();
+        states.insert(genesis_hash, genesis_state);
         Self {
             blocks: map,
             orphans_map: orphans_map,
@@ -29,25 +35,32 @@ impl Blockchain {
             longest_hash: longest_hash,
             max_index: 0,
             difficulty: difficulty,
+            states: states,
+            check_trans: true,
         }
     }
 
     // Insert a block with existence & validation check (used in inter-miner blocks broadcast)
     pub fn insert_with_check(&mut self, block: &Block) -> bool {
-        if self.exist(&block.hash) || !self.validate_block(block) {
+        if self.exist(&block.hash) || !self.validate_block_meta(block) {
             return false;
         }
-        self.insert(block);
-        return true;
+        return self.insert(block);
     }
 
     // Insert a block into blockchain if parent exists; otherwise, put it into orphan buffer
-    pub fn insert(&mut self, block: &Block) {
+    pub fn insert(&mut self, block: &Block) -> bool {
         let mut b = block.clone();
         let parent_hash = &b.header.parent;
 
         match self.blocks.get(parent_hash) {
             Some(prev_block) => {
+                // validate transaction and generate new state
+                if let Some(new_state) = self.try_generate_new_state(block) {
+                    self.states.insert(block.hash.clone(), new_state);
+                } else {
+                    return false;
+                }
                 let cur_index = prev_block.index + 1;
                 b.index = cur_index;
                 let longest_block = self.blocks.get(&self.longest_hash).unwrap();
@@ -79,6 +92,7 @@ impl Blockchain {
                 }
             }
         }
+        return true;
     }
 
     // Deal with a newly-arrived parent block's orphans
@@ -108,15 +122,21 @@ impl Blockchain {
         Some(cur.clone())
     }
 
-    // Perform validation checks on PoW & difficulty & all transactions within it
-    pub fn validate_block(&self, block: &Block) -> bool {
-        // check difficulty
-        if block.header.difficulty != self.difficulty {
-            return false;
+    pub fn try_generate_new_state(&self, block: &Block) -> Option<State> {
+        if !self.check_trans {
+            return Some(State::new());  // skip in test
         }
-        // check proof of work
+        let parent_state = self.states.get(&block.header.parent).unwrap();
+        return block.try_generate_state(parent_state);
+    }
+
+    // Perform validation checks on PoW & difficulty & all transactions within it
+    pub fn validate_block_meta(&self, block: &Block) -> bool {
         let header_hash = block.header.hash();
-        if header_hash == block.hash && header_hash < self.difficulty && block.validate_trans() {
+        if header_hash == block.hash
+            && block.header.difficulty == self.difficulty
+            && header_hash < self.difficulty
+            && block.validate_signature() {
             return true;
         }
         return false;
@@ -233,6 +253,11 @@ impl Blockchain {
         self.blocks.get(&self.longest_hash)
             .unwrap().header.difficulty.clone()
     }
+
+    #[cfg(any(test, test_utilities))]
+    pub fn set_check_trans(&mut self, b: bool) {
+        self.check_trans = b;
+    }
 }
 
 #[cfg(any(test, test_utilities))]
@@ -240,10 +265,12 @@ mod tests {
     use super::*;
     use crate::crypto::hash::Hashable;
     use crate::helper::*;
+    use crate::crypto::key_pair;
 
     #[test]
-    fn insert_one() {
+    fn test_insert() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         assert_eq!(&genesis_hash, &H256::from([0u8; 32]));
         let block = generate_random_block(&genesis_hash);
@@ -251,6 +278,20 @@ mod tests {
         assert_eq!(blockchain.tip(), block.hash());
         assert_eq!(blockchain.tip_difficulty(), block.header.difficulty);
         assert!(!blockchain.insert_with_check(&block));
+
+        let mut blockchain = Blockchain::new();
+        let key = key_pair::random();
+        let signed_coinbase_tran = generate_signed_coinbase_transaction(&key);
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran.clone()]);
+        let header = generate_header(&genesis_hash, &content, 0, &generate_random_hash());
+        let block = Block::new(header, content);
+        assert!(blockchain.insert(&block));
+
+        let invalid_signed_tran = generate_random_signed_transaction();
+        let content = Content::new_with_trans(&vec![invalid_signed_tran.clone()]);
+        let header = generate_header(&block.hash, &content, 0, &generate_random_hash());
+        let block = Block::new(header, content);
+        assert!(!blockchain.insert(&block));
     }
 
     #[test]
@@ -262,6 +303,7 @@ mod tests {
          *              ---------  block_2_1 <- block_2_2
          */
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block_1_1 = generate_random_block(&genesis_hash);
         blockchain.insert(&block_1_1);
@@ -285,6 +327,7 @@ mod tests {
     #[test]
     fn handle_orphan() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         assert_eq!(1, blockchain.length());
         let block1 = generate_random_block(&genesis_hash);
@@ -298,6 +341,7 @@ mod tests {
 
         // naming rule: block_<branch>_<index>
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block_1_1 = generate_random_block(&genesis_hash);
         let block_1_2 = generate_random_block(&block_1_1.hash());
@@ -321,6 +365,7 @@ mod tests {
     #[test]
     fn longest_chain_hash() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash());
@@ -337,6 +382,7 @@ mod tests {
     #[test]
     fn test_exist() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         assert!(blockchain.exist(&genesis_hash));
         let block1 = generate_random_block(&genesis_hash);
@@ -353,6 +399,7 @@ mod tests {
     #[test]
     fn test_get_blocks() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash);
@@ -369,6 +416,7 @@ mod tests {
     #[test]
     fn test_get_block() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash);
@@ -383,6 +431,7 @@ mod tests {
     #[test]
     fn test_get_hash_chain() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash);
@@ -400,6 +449,7 @@ mod tests {
     #[test]
     fn test_get_header_chain() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash);
@@ -416,6 +466,7 @@ mod tests {
     #[test]
     fn test_get_block_chain() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash);
@@ -432,6 +483,7 @@ mod tests {
     #[test]
     fn test_orphan() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block1 = generate_random_block(&genesis_hash);
         let block2 = generate_random_block(&block1.hash);
@@ -457,6 +509,7 @@ mod tests {
     #[test]
     fn midtermproject1_insert_one() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block = generate_random_block(&genesis_hash);
         blockchain.insert(&block);
@@ -465,6 +518,7 @@ mod tests {
     #[test]
     fn midtermproject1_insert_3_2() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block_1 = generate_random_block(&genesis_hash);
         blockchain.insert(&block_1);
@@ -485,6 +539,7 @@ mod tests {
     #[test]
     fn midtermproject1_insert_2_3() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block_1 = generate_random_block(&genesis_hash);
         blockchain.insert(&block_1);
@@ -505,6 +560,7 @@ mod tests {
     #[test]
     fn midtermproject1_insert_3_fork_and_back() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block_1 = generate_random_block(&genesis_hash);
         blockchain.insert(&block_1);
@@ -529,6 +585,7 @@ mod tests {
     #[test]
     fn midtermproject1_insert_3_fork_and_6() {
         let mut blockchain = Blockchain::new();
+        blockchain.set_check_trans(false);
         let genesis_hash = blockchain.tip();
         let block_1 = generate_random_block(&genesis_hash);
         blockchain.insert(&block_1);
@@ -564,23 +621,23 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_block() {
+    fn test_validate_block_meta() {
         let mut blockchain = Blockchain::new();
         let genesis_hash = blockchain.tip();
         let difficulty: H256 = gen_difficulty_array(0).into();
         blockchain.change_difficulty(&difficulty);
         let mut block = generate_block(&genesis_hash, 40, &difficulty);
-        assert!(blockchain.validate_block(&block));
+        assert!(blockchain.validate_block_meta(&block));
 
         // Hash Validate
         let hash: H256 = gen_difficulty_array(20).into();
         block.change_hash(&hash);
-        assert!(!blockchain.validate_block(&block));
+        assert!(!blockchain.validate_block_meta(&block));
 
         //POW validate
         let difficulty: H256 = gen_difficulty_array(20).into();
         blockchain.change_difficulty(&difficulty);
         let block = generate_block(&genesis_hash, 1, &difficulty);
-        assert!(!blockchain.validate_block(&block));
+        assert!(!blockchain.validate_block_meta(&block));
     }
 }

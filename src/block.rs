@@ -4,7 +4,8 @@ use serde::{Serialize, Deserialize};
 use chrono::prelude::DateTime;
 use chrono::Utc;
 use std::time::{UNIX_EPOCH, Duration};
-use crate::crypto::hash::{H256, Hashable};
+use std::collections::HashMap;
+use crate::crypto::hash::{H256, H160, Hashable};
 use crate::transaction::{SignedTransaction, PrintableTransaction};
 use crate::crypto::merkle::MerkleTree;
 use crate::config::DIFFICULTY;
@@ -46,6 +47,32 @@ pub struct Content {
 #[derive(Serialize, Deserialize)]
 pub struct PrintableContent {
     pub trans: Vec<PrintableTransaction>
+}
+
+#[derive(Clone)]
+pub struct State (HashMap<(H256, u32), (u64, H160)>);
+
+impl State {
+    pub fn new() -> Self {
+        let map: HashMap<(H256, u32), (u64, H160)> = HashMap::new();
+        Self(map)
+    }
+
+    pub fn insert(&mut self, key: (H256, u32), val: (u64, H160)) {
+        self.0.insert(key, val);
+    }
+
+    pub fn remove(&mut self, key: &(H256, u32)) -> Option<(u64, H160)> {
+        return self.0.remove(key);
+    }
+
+    pub fn contains_key(&self, key: &(H256, u32)) -> bool {
+        return self.0.contains_key(key);
+    }
+
+    pub fn get(&self, key: &(H256, u32)) -> Option<&(u64, H160)> {
+        return self.0.get(key);
+    }
 }
 
 impl Hashable for Block {
@@ -101,7 +128,7 @@ impl Block {
     }
 
     // Check transaction signature in content; if anyone fails, the whole block fails
-    pub fn validate_trans(&self) -> bool {
+    pub fn validate_signature(&self) -> bool {
         let trans = &self.content.trans;
         for t in trans.iter() {
             if !t.sign_check() {
@@ -109,6 +136,57 @@ impl Block {
             }
         }
         true
+    }
+
+    // Validate all transactions, such as coinbase transaction and double-spend issue
+    // return None if any check fails
+    pub fn try_generate_state(&self, parent_state: &State) -> Option<State> {
+        let mut state = parent_state.clone();
+        let mut trans_iter = self.content.trans.iter();
+
+        // check coinbase transaction
+        if let Some(coinbase_tran) = trans_iter.next() {
+            if !coinbase_tran.is_coinbase_tran() {
+                return None;
+            }
+            let output = coinbase_tran.transaction.outputs[0].clone();
+            state.insert((coinbase_tran.hash.clone(), 0),
+                (output.val, output.rec_address));
+        } else {
+            return None;
+        }
+
+        // check non-coinbase transactions
+        while let Some(tran) = trans_iter.next() {
+            let mut balance = 0i64;
+            let sender_addr: H160 = tran.sender_addr();
+
+            // remove inputs from state
+            for input in tran.transaction.inputs.iter() {
+                match state.remove(&(input.pre_hash, input.index)) {
+                    Some((val, owner_addr)) => {
+                        if owner_addr != sender_addr {
+                            return None;
+                        }
+                        balance += val as i64;
+                    }
+                    None => return None
+                }
+            }
+
+            // add output to state
+            for (index, output) in tran.transaction.outputs.iter().enumerate() {
+                state.insert((tran.hash.clone(), index as u32),
+                             (output.val, output.rec_address));
+                balance -= output.val as i64;
+            }
+
+            // check balance
+            if balance < 0 {
+                return None;
+            }
+        }
+        return Some(state);
     }
 
     #[cfg(any(test, test_utilities))]
@@ -210,9 +288,13 @@ impl PrintableContent {
 
 #[cfg(any(test, test_utilities))]
 pub mod test {
+    use ring::signature::KeyPair;
     use super::*;
     use crate::crypto::hash::H256;
     use crate::helper::*;
+    use crate::crypto::key_pair;
+    use crate::config::COINBASE_REWARD;
+    use crate::transaction::{TxInput, TxOutput};
 
     #[test]
     fn test_genesis() {
@@ -298,5 +380,106 @@ pub mod test {
         assert_eq!(t_1.hash, res[0]);
         assert_eq!(t_2.hash, res[1]);
         assert_eq!(t_3.hash, res[2]);
+    }
+
+    #[test]
+    fn test_try_generate_state() {
+        let key_1 = key_pair::random();
+        let addr_1: H160 = digest::digest(&digest::SHA256, key_1.public_key().as_ref()).into();
+        let random_h256 = generate_random_hash();
+        let signed_coinbase_tran = generate_signed_coinbase_transaction(&key_1);
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran.clone()]);
+        let header = generate_header(&random_h256, &content, 0, &random_h256);
+        let block = Block::new(header, content.clone());
+        let new_state = block.try_generate_state(&State::new());
+        if let Some(state) = new_state.clone() {
+            assert!(state.contains_key(&(signed_coinbase_tran.hash.clone(), 0)));
+            let value = state.get(&(signed_coinbase_tran.hash.clone(), 0)).unwrap().clone();
+            assert_eq!((COINBASE_REWARD, addr_1.clone()), value);
+        } else {
+            assert!(false);
+        }
+
+        let signed_coinbase_tran_2 = generate_signed_coinbase_transaction(&key_1);
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran_2.clone()]);
+        let header = generate_header(&random_h256, &content, 0, &random_h256);
+        let block = Block::new(header, content.clone());
+        let state_2 = block.try_generate_state(&new_state.unwrap());
+        if let Some(state) = state_2.clone() {
+            assert!(state.contains_key(&(signed_coinbase_tran.hash.clone(), 0)));
+            let value = state.get(&(signed_coinbase_tran.hash.clone(), 0)).unwrap().clone();
+            assert_eq!((COINBASE_REWARD, addr_1.clone()), value);
+            assert!(state.contains_key(&(signed_coinbase_tran_2.hash.clone(), 0)));
+            let value = state.get(&(signed_coinbase_tran_2.hash.clone(), 0)).unwrap().clone();
+            assert_eq!((COINBASE_REWARD, addr_1.clone()), value);
+        } else {
+            assert!(false);
+        }
+
+        // correct
+        let signed_coinbase_tran_3 = generate_signed_coinbase_transaction(&key_1);
+        let random_h160 = generate_random_h160();
+        let txinput = TxInput {pre_hash: signed_coinbase_tran_2.hash.clone(), index: 0};
+        let txoutput_1 = TxOutput {rec_address: random_h160, val: COINBASE_REWARD-1};
+        let txoutput_2 = TxOutput {rec_address: random_h160, val: 1};
+        let valid_tran = generate_signed_transaction(&key_1, vec![txinput], vec![txoutput_1, txoutput_2]);
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran_3.clone(), valid_tran.clone()]);
+        let header = generate_header(&random_h256, &content, 0, &random_h256);
+        let block = Block::new(header, content.clone());
+        let non_state = block.try_generate_state(&state_2.clone().unwrap());
+        if let Some(state) = non_state.clone() {
+            assert!(!state.contains_key(&(signed_coinbase_tran_2.hash.clone(), 0)));
+            assert!(state.contains_key(&(valid_tran.hash.clone(), 0)));
+            assert!(state.contains_key(&(valid_tran.hash.clone(), 1)));
+            let value = state.get(&(valid_tran.hash.clone(), 0)).unwrap().clone();
+            assert_eq!((COINBASE_REWARD-1, random_h160), value);
+            let value = state.get(&(valid_tran.hash.clone(), 1)).unwrap().clone();
+            assert_eq!((1, random_h160), value);
+        } else {
+            assert!(false);
+        }
+
+        // wrong: output is bigger than input
+        let signed_coinbase_tran = generate_signed_coinbase_transaction(&key_1);
+        let random_h160 = generate_random_h160();
+        let txinput = TxInput {pre_hash: signed_coinbase_tran_2.hash.clone(), index: 0};
+        let txoutput = TxOutput {rec_address: random_h160, val: COINBASE_REWARD+1};  // +1
+        let invalid_tran = generate_signed_transaction(&key_1, vec![txinput], vec![txoutput]);
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran.clone(), invalid_tran.clone()]);
+        let header = generate_header(&random_h256, &content, 0, &random_h256);
+        let block = Block::new(header, content.clone());
+        let non_state = block.try_generate_state(&state_2.clone().unwrap());
+        if let Some(_) = non_state {
+            assert!(false);
+        }
+
+        // wrong public key
+        let key_2 = key_pair::random();
+        let signed_coinbase_tran = generate_signed_coinbase_transaction(&key_1);
+        let random_h160 = generate_random_h160();
+        let txinput = TxInput {pre_hash: signed_coinbase_tran_2.hash.clone(), index: 0};
+        let txoutput = TxOutput {rec_address: random_h160, val: COINBASE_REWARD};
+        let invalid_tran = generate_signed_transaction(&key_2, vec![txinput], vec![txoutput]);  // wrong public key
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran.clone(), invalid_tran.clone()]);
+        let header = generate_header(&random_h256, &content, 0, &random_h256);
+        let block = Block::new(header, content.clone());
+        let non_state = block.try_generate_state(&state_2.clone().unwrap());
+        if let Some(_) = non_state {
+            assert!(false);
+        }
+
+        // wrong pre_hash
+        let signed_coinbase_tran = generate_signed_coinbase_transaction(&key_1);
+        let random_h160 = generate_random_h160();
+        let txinput = TxInput {pre_hash: generate_random_hash(), index: 0};
+        let txoutput = TxOutput {rec_address: random_h160, val: COINBASE_REWARD};
+        let invalid_tran = generate_signed_transaction(&key_1, vec![txinput], vec![txoutput]);
+        let content = Content::new_with_trans(&vec![signed_coinbase_tran.clone(), invalid_tran.clone()]);
+        let header = generate_header(&random_h256, &content, 0, &random_h256);
+        let block = Block::new(header, content.clone());
+        let non_state = block.try_generate_state(&state_2.clone().unwrap());
+        if let Some(_) = non_state {
+            assert!(false);
+        }
     }
 }

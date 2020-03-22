@@ -309,6 +309,9 @@ pub mod tests {
         let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1) = new_server_env(p2p_addr_1);
         let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2) = new_server_env(p2p_addr_2);
         let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3) = new_server_env(p2p_addr_3);
+        blockchain_1.lock().unwrap().set_check_trans(false);
+        blockchain_2.lock().unwrap().set_check_trans(false);
+        blockchain_3.lock().unwrap().set_check_trans(false);
 
         // bilateral connection!!
         let peers_1 = vec![p2p_addr_1];

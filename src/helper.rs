@@ -2,11 +2,12 @@ use crate::transaction::*;
 use crate::block::*;
 use crate::crypto::hash::{H256, H160};
 use crate::crypto::key_pair;
-use crate::config::{RAND_INPUTS_NUM, RAND_OUTPUTS_NUM};
+use crate::config::{RAND_INPUTS_NUM, RAND_OUTPUTS_NUM, COINBASE_REWARD};
 
 use rand::{Rng,thread_rng};
 use rand::distributions::Distribution;
-use ring::signature::KeyPair;
+use ring::signature::{KeyPair, Ed25519KeyPair};
+use ring::digest;
 
 ///Block
 pub fn generate_random_block(parent: &H256) -> Block {
@@ -62,6 +63,21 @@ fn generate_content() -> Content {
 }
 
 /// Transaction
+pub fn generate_signed_coinbase_transaction(key: &Ed25519KeyPair) -> SignedTransaction {
+    let addr: H160 = digest::digest(&digest::SHA256, key.public_key().as_ref()).into();
+    let txoutput = TxOutput {rec_address: addr.clone(), val: COINBASE_REWARD};
+    return generate_signed_transaction(key, Vec::new(), vec![txoutput]);
+}
+
+pub fn generate_signed_transaction(key: &Ed25519KeyPair,
+        inputs: Vec<TxInput>, outputs: Vec<TxOutput>) -> SignedTransaction {
+    let pub_key_bytes: Box<[u8]> = key.public_key().as_ref().into();
+    let tran = Transaction::new(inputs, outputs);
+    let signature = sign(&tran, &key);
+    let sig_bytes: Box<[u8]> = signature.as_ref().into();
+    return SignedTransaction::new(tran, sig_bytes, pub_key_bytes);
+}
+
 pub fn generate_random_signed_transaction() -> SignedTransaction {
     let transaction = generate_random_transaction();
     let key = key_pair::random();
