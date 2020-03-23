@@ -8,6 +8,7 @@ use std::time::SystemTime;
 
 use std::thread;
 use std::sync::{Arc, Mutex};
+use ring::signature::Ed25519KeyPair;
 
 use crate::blockchain::Blockchain;
 use crate::block::{Header, Block};
@@ -37,6 +38,7 @@ pub struct Context {
     mempool: Arc<Mutex<MemPool>>,
     pub nonce: u32,
     pub mined_num: usize,
+    key_pair: Arc<Ed25519KeyPair>,
 }
 
 #[derive(Clone)]
@@ -49,6 +51,7 @@ pub fn new(
     server: &ServerHandle,
     blockchain: &Arc<Mutex<Blockchain>>,
     mempool: &Arc<Mutex<MemPool>>,
+    key_pair: &Arc<Ed25519KeyPair>,
 ) -> (Context, Handle) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
 
@@ -60,6 +63,7 @@ pub fn new(
         mempool: Arc::clone(mempool),
         nonce: 0,
         mined_num: 0,
+        key_pair: Arc::clone(key_pair),
     };
 
     let handle = Handle {
@@ -192,7 +196,7 @@ impl Context {
         let mempool = self.mempool.lock().unwrap();
 
         //Get content for new block from mempool
-        let content = mempool.create_content();
+        let content = mempool.create_content(&self.key_pair);
         drop(mempool);
 
         let nonce = self.nonce;

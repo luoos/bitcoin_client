@@ -39,13 +39,13 @@ pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context,
     blockchain.change_difficulty(&difficulty);
     let blockchain =  Arc::new(Mutex::new(blockchain));
 
-    let mempool = MemPool::new(&key_pair);
+    let mempool = MemPool::new();
     let mempool = Arc::new(Mutex::new(mempool));
 
     let worker_ctx = worker::new(4, receiver, &server, &blockchain, &mempool, &peers, addr);
     worker_ctx.start();
 
-    let (miner_ctx, _miner) = miner::new(&server, &blockchain, &mempool);
+    let (miner_ctx, _miner) = miner::new(&server, &blockchain, &mempool, &key_pair);
 
     let transaction_generator_ctx =
         transaction_generator::new(&server, &mempool, &blockchain, &State::new(), &peers, &account);

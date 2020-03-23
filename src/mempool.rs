@@ -6,54 +6,66 @@ use crate::config::{POOL_SIZE_LIMIT, BLOCK_SIZE_LIMIT};
 use std::collections::HashMap;
 use std::cmp::min;
 use log::debug;
-use std::sync::Arc;
 use ring::signature::Ed25519KeyPair;
 use crate::helper::generate_signed_coinbase_transaction;
 
 pub struct MemPool {
     pub transactions: HashMap<H256, SignedTransaction>,
-    pub tx_inputs: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
-    pub key_pair: Arc<Ed25519KeyPair>,
+    pub input_tran_map: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
 }
 
 impl MemPool {
     // Create an empty mempool
-    pub fn new(key_pair: &Arc<Ed25519KeyPair>) -> Self {
+    pub fn new() -> Self {
         let transactions: HashMap<H256, SignedTransaction> = HashMap::new();
-        let tx_inputs: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
+        let input_tran_map: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
         Self {
             transactions,
-            tx_inputs,
-            key_pair: Arc::clone(key_pair),
+            input_tran_map,
         }
     }
 
     // Randomly create and init with n trans
-    pub fn new_with_trans(key_pair: &Arc<Ed25519KeyPair>, trans: &Vec<SignedTransaction>) -> Self {
-        let mut transactions: HashMap<H256, SignedTransaction> = HashMap::new();
-        let tx_inputs: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
-        for new_t in trans.iter()  {
-            transactions.insert(new_t.hash(), new_t.clone());
+    pub fn new_with_trans(trans: &Vec<SignedTransaction>) -> Self {
+        let mut mempool = Self::new();
+        for t in trans.iter() {
+            mempool.add_with_check(t);
         }
-        MemPool {
-            transactions,
-            tx_inputs,
-            key_pair: Arc::clone(key_pair),
-        }
+        return mempool;
     }
 
     // Add a valid transaction after signature check && double-spend txinput check
     pub fn add_with_check(&mut self, tran: &SignedTransaction) -> bool {
-        let hash = tran.hash();
-        let ts = tran.transaction.ts;
-        if self.exist(&hash) || !tran.sign_check() || !self.check_conflict_tx_input(tran) || self.size() >= POOL_SIZE_LIMIT {
+        if self.exist(&tran.hash) || !tran.sign_check() || self.size() >= POOL_SIZE_LIMIT {
             return false;
         }
-        self.transactions.insert(hash, tran.clone());
+        return self.try_insert(tran);
+    }
+
+    // try insert transaction if no conflict input
+    // or the transaction has the minimal timestamp among conflict trans
+    fn try_insert(&mut self, tran: &SignedTransaction) -> bool {
+        let mut to_remove_hash: Vec<H256> = Vec::new();
+        let ts = tran.transaction.ts;
         for input in tran.transaction.inputs.iter() {
-            self.tx_inputs.insert(input.clone(), (hash, ts));
+            if let Some((conf_hash, conf_ts)) = self.input_tran_map.get(input) {
+                if ts < *conf_ts {
+                    to_remove_hash.push(conf_hash.clone());
+                } else {
+                    return false; // conflict and has bigger timestamp
+                }
+            }
         }
-        true
+        // remove conflict trans
+        for conf_hash in to_remove_hash.iter() {
+            self.transactions.remove(conf_hash);
+        }
+
+        for input in tran.transaction.inputs.iter() {
+            self.input_tran_map.insert(input.clone(), (tran.hash, ts));
+        }
+        self.transactions.insert(tran.hash.clone(), tran.clone());
+        return true;
     }
 
     // Remove transactions from pool
@@ -75,7 +87,7 @@ impl MemPool {
         for trans in content.trans.iter() {
             let inputs = &trans.transaction.inputs;
             for input in inputs.iter() {
-                if let Some(_) = self.tx_inputs.remove(input) {
+                if let Some(_) = self.input_tran_map.remove(input) {
                     debug!("Remove conflicting input from mempool {:?}", input);
                 }
             }
@@ -83,10 +95,10 @@ impl MemPool {
     }
 
     // Create content for miner's block to include as many transactions as possible
-    pub fn create_content(&self) -> Content {
+    pub fn create_content(&self, key_pair: &Ed25519KeyPair) -> Content {
         let mut trans = Vec::<SignedTransaction>::new();
 
-         let coinbase_trans = generate_signed_coinbase_transaction(&self.key_pair);
+         let coinbase_trans = generate_signed_coinbase_transaction(key_pair);
          trans.push(coinbase_trans);
 
         let trans_num: usize = min(BLOCK_SIZE_LIMIT, self.size());
@@ -96,27 +108,6 @@ impl MemPool {
             }
         }
         Content::new_with_trans(&trans)
-    }
-
-    // Always reject transaction of larger timestamp
-    // return false when rejecting new-coming transaction
-    pub fn check_conflict_tx_input(&mut self, trans: &SignedTransaction) -> bool {
-        let inputs = &trans.transaction.inputs;
-        let new_ts = trans.transaction.ts;
-        for input in inputs.iter() {
-            if let Some((hash, old_ts)) = self.tx_inputs.get(input) {
-                if new_ts < old_ts.clone() {
-                    debug!("Reject already exist conflict transaction {:?}", hash);
-                    self.transactions.remove(hash);
-                    self.tx_inputs.remove(input);
-                    return true;
-                } else {
-                    debug!("Reject new coming conflict TxInput {:?}", input);
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     // check existence of a hash
@@ -160,8 +151,7 @@ mod tests {
 
     #[test]
     fn test_add_with_check() {
-        let key_pair = Arc::new(key_pair::random());
-        let mut mempool = MemPool::new(&key_pair);
+        let mut mempool = MemPool::new();
         assert!(mempool.empty());
         let t = generate_random_signed_transaction();
         let t_2 = generate_random_signed_transaction();
@@ -177,8 +167,7 @@ mod tests {
 
     #[test]
     fn test_remove_trans() {
-        let key_pair = Arc::new(key_pair::random());
-        let mut mempool = MemPool::new(&key_pair);
+        let mut mempool = MemPool::new();
         let t = generate_random_signed_transaction();
         let t_2 = generate_random_signed_transaction();
         let t_3 = generate_random_signed_transaction();
@@ -198,8 +187,8 @@ mod tests {
 
     #[test]
     fn test_create_trans() {
-        let key_pair = Arc::new(key_pair::random());
-        let mut mempool = MemPool::new(&key_pair);
+        let key = key_pair::random();
+        let mut mempool = MemPool::new();
         let mut t = generate_random_signed_transaction();
         mempool.add_with_check(&t);
         t = generate_random_signed_transaction();
@@ -207,7 +196,7 @@ mod tests {
         t = generate_random_signed_transaction();
         mempool.add_with_check(&t);
 
-        let content = mempool.create_content();
+        let content = mempool.create_content(&key);
         assert_eq!(content.trans.len(), 3);
     }
 
@@ -263,5 +252,22 @@ mod tests {
         assert!(pool_1.empty());
         drop(pool_1);
         drop(pool_2);
+    }
+
+    #[test]
+    fn test_try_insert() {
+        let key = key_pair::random();
+        let mut mempool = MemPool::new();
+        let h256 = generate_random_hash();
+        let input = TxInput {pre_hash: h256, index: 0};
+        let signed_tran_1 = generate_signed_transaction(&key, vec![input.clone()], Vec::new());
+        sleep(time::Duration::from_millis(10));
+        let signed_tran_2 = generate_signed_transaction(&key, vec![input.clone()], Vec::new());
+        assert!(mempool.try_insert(&signed_tran_2));
+        assert!(mempool.exist(&signed_tran_2.hash));
+        assert!(mempool.try_insert(&signed_tran_1));
+        assert!(!mempool.try_insert(&signed_tran_2));
+        assert!(mempool.exist(&signed_tran_1.hash));
+        assert!(!mempool.exist(&signed_tran_2.hash));
     }
 }

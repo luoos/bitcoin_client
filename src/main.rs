@@ -104,7 +104,7 @@ fn main() {
     let blockchain = Arc::new(Mutex::new(Blockchain::new()));
 
     // create mempool
-    let mempool = Arc::new(Mutex::new(MemPool::new(&key_pair)));
+    let mempool = Arc::new(Mutex::new(MemPool::new()));
 
     // creare empty init state
     let init_state = State::new();
@@ -137,6 +137,7 @@ fn main() {
         &server,
         &blockchain,
         &mempool,
+        &key_pair,
     );
     miner_ctx.start();
 
