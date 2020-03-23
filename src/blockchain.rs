@@ -520,10 +520,12 @@ mod tests {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17051);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17052);
 
-        let (server_1, _, _, blockchain_1, _, _, addr_1) = new_server_env(p2p_addr_1);
-        let (server_2, _, _, blockchain_2, _, _, addr_2) = new_server_env(p2p_addr_2);
+        let (server_1, _, _, blockchain_1, _, _, account_1) = new_server_env(p2p_addr_1);
+        let (server_2, _, _, blockchain_2, _, _, account_2) = new_server_env(p2p_addr_2);
 
         // server_1 online but no connections
+        let addr_1 = account_1.addr;
+        let addr_2 = account_2.addr;
         server_1.broadcast(Message::Introduce(addr_1));
         thread::sleep(time::Duration::from_millis(100));
         blockchain_1.lock().unwrap().set_check_trans(false);

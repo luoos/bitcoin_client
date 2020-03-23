@@ -51,10 +51,15 @@ mod test {
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17063);
         let p2p_addr_4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17064);
 
-        let (server_1, _, _, _, _, peers_1, addr_1) = new_server_env(p2p_addr_1);
-        let (server_2, _, _, _, _, peers_2, addr_2) = new_server_env(p2p_addr_2);
-        let (server_3, _, _, _, _, peers_3, addr_3) = new_server_env(p2p_addr_3);
-        let (server_4, _, _, _, _, peers_4, addr_4) = new_server_env(p2p_addr_4);
+        let (server_1, _, _, _, _, peers_1, account_1) = new_server_env(p2p_addr_1);
+        let (server_2, _, _, _, _, peers_2, account_2) = new_server_env(p2p_addr_2);
+        let (server_3, _, _, _, _, peers_3, account_3) = new_server_env(p2p_addr_3);
+        let (server_4, _, _, _, _, peers_4, account_4) = new_server_env(p2p_addr_4);
+
+        let addr_1 = account_1.addr;
+        let addr_2 = account_2.addr;
+        let addr_3 = account_3.addr;
+        let addr_4 = account_4.addr;
 
         // server_1 online but no connections
         server_1.broadcast(Message::Introduce(addr_1));

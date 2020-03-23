@@ -94,7 +94,7 @@ fn main() {
 
     // create user account
     let key_pair = key_pair::random();
-    let account = Account::new(key_pair);
+    let account = Arc::new(Account::new(key_pair));
     let addr = account.addr;
 
     // create peer(for transaction)
@@ -116,8 +116,7 @@ fn main() {
         &blockchain,
         &init_state,
         &peers,
-        account.key_pair,
-        account.addr,
+        &account,
     );
     transaction_generator_ctx.start();
 

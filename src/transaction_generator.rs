@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
 use log::{info, debug};
-use ring::signature::Ed25519KeyPair;
 
 use crate::network::server::Handle as ServerHandle;
 use crate::network::message::Message;
@@ -16,6 +15,7 @@ use std::collections::HashMap;
 use rand::Rng;
 use crate::transaction::{TxOutput, TxInput};
 use crate::blockchain::Blockchain;
+use crate::account::Account;
 
 pub struct Context {
     server: ServerHandle,
@@ -23,8 +23,7 @@ pub struct Context {
     blockchain: Arc<Mutex<Blockchain>>,
     state: State,
     peers: Arc<Mutex<Peers>>,
-    key_pair: Ed25519KeyPair,
-    self_addr: H160,
+    account: Arc<Account>,
 }
 
 pub fn new(
@@ -33,8 +32,7 @@ pub fn new(
     blockchain: &Arc<Mutex<Blockchain>>,
     state: &State,
     peers: &Arc<Mutex<Peers>>,
-    key_pair: Ed25519KeyPair,
-    self_addr: H160,
+    account: &Arc<Account>,
 ) -> Context {
     Context {
         server: server.clone(),
@@ -42,8 +40,7 @@ pub fn new(
         blockchain: Arc::clone(blockchain),
         state: state.clone(),
         peers: Arc::clone(peers),
-        key_pair,
-        self_addr,
+        account: Arc::clone(account),
     }
 }
 
@@ -76,7 +73,7 @@ impl Context {
 
     //For now, just call generate_random_signed_transaction
     pub fn generating(&mut self) {
-        let new_t = generate_random_signed_transaction_from_keypair(&self.key_pair);
+        let new_t = generate_random_signed_transaction_from_keypair(&self.account.key_pair);
         let mut mempool = self.mempool.lock().unwrap();
         if mempool.add_with_check(&new_t) {
             info!("Generate new transaction with {} input {} output! Now mempool has {} transaction",
@@ -107,9 +104,9 @@ impl Context {
 
                 let tx_inputs: Vec<TxInput> = vec![input];
                 let tx_outputs: Vec<TxOutput> =
-                    vec![TxOutput::new(peer_addr, send_val), TxOutput::new(self.self_addr, total_val - send_val)];
+                    vec![TxOutput::new(peer_addr, send_val), TxOutput::new(self.account.addr, total_val - send_val)];
 
-                let new_t = generate_signed_transaction(&self.key_pair, tx_inputs, tx_outputs);
+                let new_t = generate_signed_transaction(&self.account.key_pair, tx_inputs, tx_outputs);
                 let mut mempool = self.mempool.lock().unwrap();
                 if mempool.add_with_check(&new_t) {
                     info!("Generate new transaction with {} input {} output! Now mempool has {} transaction",
@@ -128,7 +125,7 @@ impl Context {
 
         for (input, output) in cur_state.iter() {
             // Arbitrary order traversal
-            if output.1 == self.self_addr {
+            if output.1 == self.account.addr {
                 return Some((TxInput::new(input.0, input.1), TxOutput::new(output.1, output.0)));
             }
         }
@@ -162,7 +159,7 @@ impl Context {
         let cur_state: HashMap<(H256, u32), (u64, H160)> = self.state.0.clone();
 
         for (_, (val, rec_addr)) in cur_state.iter() {
-            if rec_addr.clone() == self.self_addr {
+            if rec_addr.clone() == self.account.addr {
                 self_balance += val.clone();
             }
         }
