@@ -1,5 +1,5 @@
 use crate::crypto::hash::{H256, Hashable};
-use crate::transaction::SignedTransaction;
+use crate::transaction::{SignedTransaction, TxInput};
 use crate::block::Content;
 use crate::config::{POOL_SIZE_LIMIT, BLOCK_SIZE_LIMIT};
 
@@ -9,39 +9,48 @@ use log::debug;
 
 pub struct MemPool {
     pub transactions: HashMap<H256, SignedTransaction>,
+    pub tx_inputs: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
 }
 
 impl MemPool {
     // Create an empty mempool
     pub fn new() -> Self {
         let transactions: HashMap<H256, SignedTransaction> = HashMap::new();
+        let tx_inputs: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
         Self {
             transactions,
+            tx_inputs,
         }
     }
 
     // Randomly create and init with n trans
-    pub fn new_with_trans(trans: &Vec<SignedTransaction>) -> MemPool {
+    pub fn new_with_trans(trans: &Vec<SignedTransaction>) -> Self {
         let mut transactions: HashMap<H256, SignedTransaction> = HashMap::new();
+        let tx_inputs: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
         for new_t in trans.iter()  {
             transactions.insert(new_t.hash(), new_t.clone());
         }
         MemPool {
             transactions,
+            tx_inputs,
         }
     }
 
-    // Add a valid transaction after signature check
+    // Add a valid transaction after signature check && double-spend txinput check
     pub fn add_with_check(&mut self, tran: &SignedTransaction) -> bool {
         let hash = tran.hash();
-        if self.exist(&hash) || !tran.sign_check() || self.size() >= POOL_SIZE_LIMIT {
+        let ts = tran.transaction.ts;
+        if self.exist(&hash) || !tran.sign_check() || !self.check_conflict_tx_input(tran) || self.size() >= POOL_SIZE_LIMIT {
             return false;
         }
         self.transactions.insert(hash, tran.clone());
+        for input in tran.transaction.inputs.iter() {
+            self.tx_inputs.insert(input.clone(), (hash, ts));
+        }
         true
     }
 
-    // Remove transactions from pool and return true when succeed
+    // Remove transactions from pool
     pub fn remove_trans(&mut self, trans: &Vec<H256>) {
         for hash in trans.iter() {
             if let Some(_) = self.transactions.get(&hash) {
@@ -55,9 +64,26 @@ impl MemPool {
         }
     }
 
+    // Remove inputs conflict with already-inserted-to-blockchain ones
+    pub fn remove_conflict_tx_inputs(&mut self, content: &Content) {
+        for trans in content.trans.iter() {
+            let inputs = &trans.transaction.inputs;
+            for input in inputs.iter() {
+                if let Some(_) = self.tx_inputs.remove(input) {
+                    debug!("Remove conflicting input from mempool {:?}", input);
+                }
+            }
+        }
+    }
+
     // Create content for miner's block to include as many transactions as possible
     pub fn create_content(&self) -> Content {
         let mut trans = Vec::<SignedTransaction>::new();
+
+        // Todo: Put coinbase-transaction for content (fix key_pair acquisition)
+        // let coinbase_trans = generate_signed_coinbase_transaction(&self.key_pair);
+        // trans.push(coinbase_trans);
+
         let trans_num: usize = min(BLOCK_SIZE_LIMIT, self.size());
         for (_, tran) in self.transactions.iter() {
             if trans.len() < trans_num {
@@ -65,6 +91,27 @@ impl MemPool {
             }
         }
         Content::new_with_trans(&trans)
+    }
+
+    // Always reject transaction of larger timestamp
+    // return false when rejecting new-coming transaction
+    pub fn check_conflict_tx_input(&mut self, trans: &SignedTransaction) -> bool {
+        let inputs = &trans.transaction.inputs;
+        let new_ts = trans.transaction.ts;
+        for input in inputs.iter() {
+            if let Some((hash, old_ts)) = self.tx_inputs.get(input) {
+                if new_ts < old_ts.clone() {
+                    debug!("Reject already exist conflict transaction {:?}", hash);
+                    self.transactions.remove(hash);
+                    self.tx_inputs.remove(input);
+                    return true;
+                } else {
+                    debug!("Reject new coming conflict TxInput {:?}", input);
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     // check existence of a hash

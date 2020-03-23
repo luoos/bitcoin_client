@@ -30,12 +30,12 @@ impl Blockchain {
         states.insert(genesis_hash, genesis_state);
         Self {
             blocks: map,
-            orphans_map: orphans_map,
+            orphans_map,
             orphans: HashMap::new(),
-            longest_hash: longest_hash,
+            longest_hash,
             max_index: 0,
-            difficulty: difficulty,
-            states: states,
+            difficulty,
+            states,
             check_trans: true,
         }
     }
@@ -122,6 +122,7 @@ impl Blockchain {
         Some(cur.clone())
     }
 
+    // Try to create new state for the new block
     pub fn try_generate_new_state(&self, block: &Block) -> Option<State> {
         if !self.check_trans {
             return Some(State::new());  // skip in test
@@ -145,6 +146,10 @@ impl Blockchain {
     // Get the last block's hash of the longest chain
     pub fn tip(&self) -> H256 {
         self.longest_hash.clone()
+    }
+
+    pub fn tip_block_state(&self) -> State {
+        self.states.get(&self.longest_hash).unwrap().clone()
     }
 
     // include genesis block

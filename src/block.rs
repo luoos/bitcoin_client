@@ -50,7 +50,7 @@ pub struct PrintableContent {
 }
 
 #[derive(Clone)]
-pub struct State (HashMap<(H256, u32), (u64, H160)>);
+pub struct State (pub HashMap<(H256, u32), (u64, H160)>);
 
 impl State {
     pub fn new() -> Self {
@@ -171,6 +171,7 @@ impl Block {
                         }
                         balance += val as i64;
                     }
+                    // double spend check
                     None => return None
                 }
             }

@@ -21,7 +21,7 @@ pub struct SignedTransaction {
 pub struct Transaction {
     pub inputs: Vec<TxInput>,
     pub outputs: Vec<TxOutput>,
-    ts: u64,  // timestamp to avoid same hash
+    pub ts: u64,  // timestamp to avoid same hash
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,7 +33,7 @@ pub struct PrintableTransaction {
     pub outputs: Vec<PrintableTxOutput>,
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone, Hash)]
 pub struct TxInput {
     pub pre_hash: H256, // Hash of previous transaction
     pub index: u32,   // Index in previous transaction's outputs vector
@@ -42,7 +42,7 @@ pub struct TxInput {
 #[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
 pub struct TxOutput {
     pub rec_address: H160, // Recipient's address
-    pub val: u64,        // Number of coin to transfer
+    pub val: u64,        // Value to transfer
 }
 
 #[derive(Serialize, Deserialize)]

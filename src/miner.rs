@@ -171,6 +171,7 @@ impl Context {
         // remove content's all transactions from mempool
         let mut mempool = self.mempool.lock().unwrap();
         mempool.remove_trans(&hash_of_trans);
+        mempool.remove_conflict_tx_inputs(&block.content);
 
         // add new mined block into total count
         self.mined_num += 1;
@@ -189,11 +190,6 @@ impl Context {
         drop(blockchain);
 
         let mempool = self.mempool.lock().unwrap();
-
-        // Empty mempool, go back to sleep for a while
-        if mempool.size() == 0 {
-            return false;
-        }
 
         //Get content for new block from mempool
         let content = mempool.create_content();
