@@ -28,8 +28,8 @@ pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context,
     let (server_ctx, server) = server::new(ipv4_addr, sender).unwrap();
     server_ctx.start().unwrap();
 
-    let key_pair = key_pair::random();
-    let account = Arc::new(Account::new(key_pair));
+    let key_pair = Arc::new(key_pair::random());
+    let account = Arc::new(Account::new(&key_pair));
     let addr = account.addr;
 
     let peers = Arc::new(Mutex::new(Peers::new()));
@@ -39,7 +39,7 @@ pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context,
     blockchain.change_difficulty(&difficulty);
     let blockchain =  Arc::new(Mutex::new(blockchain));
 
-    let mempool = MemPool::new();
+    let mempool = MemPool::new(&key_pair);
     let mempool = Arc::new(Mutex::new(mempool));
 
     let worker_ctx = worker::new(4, receiver, &server, &blockchain, &mempool, &peers, addr);

@@ -93,8 +93,8 @@ fn main() {
         });
 
     // create user account
-    let key_pair = key_pair::random();
-    let account = Arc::new(Account::new(key_pair));
+    let key_pair = Arc::new(key_pair::random());
+    let account = Arc::new(Account::new(&key_pair));
     let addr = account.addr;
 
     // create peer(for transaction)
@@ -104,7 +104,7 @@ fn main() {
     let blockchain = Arc::new(Mutex::new(Blockchain::new()));
 
     // create mempool
-    let mempool = Arc::new(Mutex::new(MemPool::new()));
+    let mempool = Arc::new(Mutex::new(MemPool::new(&key_pair)));
 
     // creare empty init state
     let init_state = State::new();

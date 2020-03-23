@@ -6,25 +6,30 @@ use crate::config::{POOL_SIZE_LIMIT, BLOCK_SIZE_LIMIT};
 use std::collections::HashMap;
 use std::cmp::min;
 use log::debug;
+use std::sync::Arc;
+use ring::signature::Ed25519KeyPair;
+use crate::helper::generate_signed_coinbase_transaction;
 
 pub struct MemPool {
     pub transactions: HashMap<H256, SignedTransaction>,
     pub tx_inputs: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
+    pub key_pair: Arc<Ed25519KeyPair>,
 }
 
 impl MemPool {
     // Create an empty mempool
-    pub fn new() -> Self {
+    pub fn new(key_pair: &Arc<Ed25519KeyPair>) -> Self {
         let transactions: HashMap<H256, SignedTransaction> = HashMap::new();
         let tx_inputs: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
         Self {
             transactions,
             tx_inputs,
+            key_pair: Arc::clone(key_pair),
         }
     }
 
     // Randomly create and init with n trans
-    pub fn new_with_trans(trans: &Vec<SignedTransaction>) -> Self {
+    pub fn new_with_trans(key_pair: &Arc<Ed25519KeyPair>, trans: &Vec<SignedTransaction>) -> Self {
         let mut transactions: HashMap<H256, SignedTransaction> = HashMap::new();
         let tx_inputs: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
         for new_t in trans.iter()  {
@@ -33,6 +38,7 @@ impl MemPool {
         MemPool {
             transactions,
             tx_inputs,
+            key_pair: Arc::clone(key_pair),
         }
     }
 
@@ -80,9 +86,8 @@ impl MemPool {
     pub fn create_content(&self) -> Content {
         let mut trans = Vec::<SignedTransaction>::new();
 
-        // Todo: Put coinbase-transaction for content (fix key_pair acquisition)
-        // let coinbase_trans = generate_signed_coinbase_transaction(&self.key_pair);
-        // trans.push(coinbase_trans);
+         let coinbase_trans = generate_signed_coinbase_transaction(&self.key_pair);
+         trans.push(coinbase_trans);
 
         let trans_num: usize = min(BLOCK_SIZE_LIMIT, self.size());
         for (_, tran) in self.transactions.iter() {
@@ -148,13 +153,15 @@ mod tests {
     use crate::block::{Block, Content};
     use crate::network::message::Message;
     use crate::config::EASIEST_DIF;
+    use crate::crypto::key_pair;
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use std::thread::sleep;
     use std::time;
 
     #[test]
     fn test_add_with_check() {
-        let mut mempool = MemPool::new();
+        let key_pair = Arc::new(key_pair::random());
+        let mut mempool = MemPool::new(&key_pair);
         assert!(mempool.empty());
         let t = generate_random_signed_transaction();
         let t_2 = generate_random_signed_transaction();
@@ -170,7 +177,8 @@ mod tests {
 
     #[test]
     fn test_remove_trans() {
-        let mut mempool = MemPool::new();
+        let key_pair = Arc::new(key_pair::random());
+        let mut mempool = MemPool::new(&key_pair);
         let t = generate_random_signed_transaction();
         let t_2 = generate_random_signed_transaction();
         let t_3 = generate_random_signed_transaction();
@@ -190,7 +198,8 @@ mod tests {
 
     #[test]
     fn test_create_trans() {
-        let mut mempool = MemPool::new();
+        let key_pair = Arc::new(key_pair::random());
+        let mut mempool = MemPool::new(&key_pair);
         let mut t = generate_random_signed_transaction();
         mempool.add_with_check(&t);
         t = generate_random_signed_transaction();
