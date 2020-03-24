@@ -36,7 +36,6 @@ use crate::account::Account;
 use crate::peers::Peers;
 use crate::network::message::Message;
 use crate::crypto::key_pair;
-use crate::block::State;
 
 fn main() {
     // parse command line arguments
@@ -106,15 +105,11 @@ fn main() {
     // create mempool
     let mempool = Arc::new(Mutex::new(MemPool::new()));
 
-    // creare empty init state
-    let init_state = State::new();
-
     // start the transaction_generator
     let transaction_generator_ctx = transaction_generator::new(
         &server,
         &mempool,
         &blockchain,
-        &init_state,
         &peers,
         &account,
     );
@@ -174,6 +169,7 @@ fn main() {
         });
     }
 
+    thread::sleep(time::Duration::from_millis(100));
     // introduce myself to network_peers
     server.broadcast(Message::Introduce(addr));
 

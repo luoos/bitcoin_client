@@ -1,4 +1,4 @@
-use crate::crypto::hash::{H256, Hashable};
+use crate::crypto::hash::H256;
 use crate::transaction::{SignedTransaction, TxInput};
 use crate::block::Content;
 use crate::config::{POOL_SIZE_LIMIT, BLOCK_SIZE_LIMIT};
@@ -45,6 +45,7 @@ impl MemPool {
     // try insert transaction if no conflict input
     // or the transaction has the minimal timestamp among conflict trans
     fn try_insert(&mut self, tran: &SignedTransaction) -> bool {
+        debug!("Try to add {:?} into mempool", tran);
         let mut to_remove_hash: Vec<H256> = Vec::new();
         let ts = tran.transaction.ts;
         for input in tran.transaction.inputs.iter() {
@@ -144,7 +145,7 @@ mod tests {
     use crate::block::{Block, Content};
     use crate::network::message::Message;
     use crate::config::EASIEST_DIF;
-    use crate::crypto::key_pair;
+    use crate::crypto::{key_pair, hash::Hashable};
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use std::thread::sleep;
     use std::time;

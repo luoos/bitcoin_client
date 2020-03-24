@@ -49,7 +49,7 @@ pub struct PrintableContent {
     pub trans: Vec<PrintableTransaction>
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct State (pub HashMap<(H256, u32), (u64, H160)>);
 
 impl State {
@@ -76,6 +76,12 @@ impl State {
 
     pub fn clear(&mut self) {
         self.0.clear();
+    }
+}
+
+impl std::convert::AsRef<HashMap<(H256, u32), (u64, H160)>> for State {
+    fn as_ref(&self) -> &HashMap<(H256, u32), (u64, H160)> {
+        &self.0
     }
 }
 

@@ -48,7 +48,7 @@ pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context,
     let (miner_ctx, _miner) = miner::new(&server, &blockchain, &mempool, &key_pair);
 
     let transaction_generator_ctx =
-        transaction_generator::new(&server, &mempool, &blockchain, &State::new(), &peers, &account);
+        transaction_generator::new(&server, &mempool, &blockchain, &peers, &account);
 
     (server, miner_ctx, transaction_generator_ctx, blockchain, mempool, peers, account)
 }
