@@ -1,10 +1,9 @@
 use crate::crypto::hash::H256;
 use crate::transaction::{SignedTransaction, TxInput};
 use crate::block::Content;
-use crate::config::{POOL_SIZE_LIMIT, BLOCK_SIZE_LIMIT};
+use crate::config::POOL_SIZE_LIMIT;
 
 use std::collections::HashMap;
-use std::cmp::min;
 use log::debug;
 use ring::signature::Ed25519KeyPair;
 use crate::helper::generate_signed_coinbase_transaction;
@@ -103,11 +102,8 @@ impl MemPool {
          let coinbase_trans = generate_signed_coinbase_transaction(key_pair);
          trans.push(coinbase_trans);
 
-        let trans_num: usize = min(BLOCK_SIZE_LIMIT, self.size());
         for (_, tran) in self.transactions.iter() {
-            if trans.len() < trans_num {
-                trans.push(tran.clone());
-            }
+            trans.push(tran.clone());
         }
         Content::new_with_trans(&trans)
     }
@@ -199,7 +195,7 @@ mod tests {
         mempool.add_with_check(&t);
 
         let content = mempool.create_content(&key);
-        assert_eq!(content.trans.len(), 3);
+        assert_eq!(content.trans.len(), 4);
     }
 
     #[test]

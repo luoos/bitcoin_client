@@ -61,7 +61,6 @@ impl Context {
             drop(blockchain);
 
             if len > 1 {
-                info!("Generate from current state: {:?}", state);
                 self.generating_valid_trans(&state);
             }
             let sleep_itv = time::Duration::from_millis(TRANSACTION_GENERATE_INTERVAL);
