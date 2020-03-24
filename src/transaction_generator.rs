@@ -55,14 +55,8 @@ impl Context {
     pub fn transaction_generator_loop(&mut self) {
         loop {
             // Update state from tip of longest-chain
-            let blockchain = self.blockchain.lock().unwrap();
-            let len = blockchain.length();
-            let state = blockchain.tip_block_state();
-            drop(blockchain);
-
-            if len > 1 {
-                self.generating_valid_trans(&state);
-            }
+            let state = self.blockchain.lock().unwrap().tip_block_state();
+            self.generating_valid_trans(&state);
             let sleep_itv = time::Duration::from_millis(TRANSACTION_GENERATE_INTERVAL);
             thread::sleep(sleep_itv);
         }
@@ -104,8 +98,7 @@ impl Context {
                 let new_t = generate_signed_transaction(&self.account.key_pair, tx_inputs, tx_outputs);
                 let mut mempool = self.mempool.lock().unwrap();
                 if mempool.add_with_check(&new_t) {
-                    info!("Generate new transaction with {} input {} output! Now mempool has {} transaction",
-                          new_t.transaction.inputs.len(), new_t.transaction.outputs.len(), mempool.size());
+                    info!("Generate a new transaction! Now mempool has {} transaction", mempool.size());
                     let vec = vec![new_t.hash().clone()];
                     self.server.broadcast(Message::NewTransactionHashes(vec));
                 }

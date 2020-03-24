@@ -163,8 +163,9 @@ impl Context {
 
     // Procedures when new block found
     fn found(&mut self, block: Block) {
-        let block_size = get_block_size(block.clone());
-        info!("Found block: {:?}, number of transactions: {:?}, size: {:?}bytes", block.header, block.content.trans.len(), block_size);
+        self.mined_num += 1;
+        info!("Mined a block: {:?}, number of transactions: {:?}. Total mined: {}",
+                block.hash, block.content.trans.len(), self.mined_num);
 
         let hash_of_trans = block.content.get_trans_hashes();
         // insert block into chain
@@ -176,10 +177,6 @@ impl Context {
         let mut mempool = self.mempool.lock().unwrap();
         mempool.remove_trans(&hash_of_trans);
         mempool.remove_conflict_tx_inputs(&block.content);
-
-        // add new mined block into total count
-        self.mined_num += 1;
-        info!("Mined {} blocks so far!", self.mined_num);
 
         // broadcast new block
         let vec = vec![block.hash.clone()];
@@ -233,12 +230,6 @@ pub fn mining_base(header: &mut Header, difficulty: H256) -> bool {
         header.change_nonce();
     }
     return false;
-}
-
-// for demo
-pub fn get_block_size(block: Block) -> usize {
-    let serialized_block = bincode::serialize(&block).unwrap();
-    serialized_block.len()
 }
 
 #[cfg(any(test, test_utilities))]

@@ -128,7 +128,7 @@ impl Server {
                             network.broadcast(Message::Ping(String::from("Test ping")));
                             respond_json!(req, true, "ok");
                         }
-                        "/blockchain/showblock" => {
+                        "/blockchain/showheader" => {
                             let blocks = blockchain.lock().unwrap().block_chain();
                             let pblock = PrintableBlock::from_block_vec(&blocks);
                             let mut context = Context::new();
