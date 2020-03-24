@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_pick_send_value() {
-        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17027);
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17029);
         let (_, _, generator,  _, _, locked_peers, _) = new_server_env(p2p_addr_1);
 
         let peer_addr1 = generate_random_h160();
