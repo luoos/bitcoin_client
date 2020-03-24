@@ -2,21 +2,20 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
 use log::{info, debug};
+use rand::Rng;
+use std::cmp::min;
 
 use crate::network::server::Handle as ServerHandle;
 use crate::network::message::Message;
 use crate::mempool::MemPool;
 use crate::helper::{generate_signed_transaction, generate_random_signed_transaction_from_keypair};
 use crate::crypto::hash::{Hashable, H160};
-use crate::config::{TRANSACTION_GENERATE_INTERVAL, VALID_OUTPUTS_NUM};
+use crate::config::{TRANSACTION_GENERATE_INTERVAL};
 use crate::block::State;
 use crate::peers::Peers;
-use std::collections::HashSet;
-use rand::Rng;
 use crate::transaction::{TxOutput, TxInput};
 use crate::blockchain::Blockchain;
 use crate::account::Account;
-use std::cmp::min;
 
 pub struct Context {
     server: ServerHandle,
@@ -64,9 +63,9 @@ impl Context {
             if len > 1 {
                 info!("Generate from current state: {:?}", state);
                 self.generating_valid_trans(&state);
-                let sleep_itv = time::Duration::from_millis(TRANSACTION_GENERATE_INTERVAL);
-                thread::sleep(sleep_itv);
             }
+            let sleep_itv = time::Duration::from_millis(TRANSACTION_GENERATE_INTERVAL);
+            thread::sleep(sleep_itv);
         }
     }
 
@@ -181,61 +180,6 @@ impl Context {
         }
         output_values
     }
-
-    // Pick random peers to as receiver of new transaction
-    #[allow(dead_code)]
-    fn pick_peer_addrs(&self) -> Option<Vec<H160>> {
-        let mut peer_addrs = Vec::new();
-
-        let peers = self.peers.lock().unwrap();
-        let all_peer_addrs = peers.addrs.clone();
-        drop(peers);
-
-        let peer_num = all_peer_addrs.len();
-        let pick_num = min(VALID_OUTPUTS_NUM - 1, peer_num);
-
-        let mut rng = rand::thread_rng();
-        let mut candidates: HashSet<usize> = HashSet::new();
-        while candidates.len() < pick_num {
-            let num = rng.gen_range(0, peer_num);
-            if let None = candidates.get(&num) {
-                candidates.insert(num);
-            }
-        }
-
-        let mut cnt: usize = 0;
-        if pick_num == 0 {
-            return None;
-        } else {
-            // Arbitrary order traversal
-            for addr in all_peer_addrs.iter() {
-                if let Some(_) = candidates.get(&cnt) {
-                    peer_addrs.push(addr.clone());
-                }
-                cnt += 1;
-            }
-        }
-
-        if peer_addrs.len() > 0 {
-            return Some(peer_addrs);
-        }
-        None
-    }
-
-    // Get user's balance under current state
-    #[allow(dead_code)]
-    fn get_cur_balance(&self, state: State) -> u64 {
-        let mut self_balance: u64 = 0;
-
-        let cur_state = state.as_ref();
-
-        for (_, (val, rec_addr)) in cur_state.iter() {
-            if rec_addr.clone() == self.account.addr {
-                self_balance += val.clone();
-            }
-        }
-        self_balance
-    }
 }
 
 #[cfg(any(test, test_utilities))]
@@ -248,7 +192,6 @@ mod tests {
     use crate::helper::*;
     use crate::config::{COINBASE_REWARD, REPEAT_TEST_TIME, VALID_OUTPUTS_NUM};
     use crate::transaction::{TxInput, TxOutput};
-    use crate::crypto::hash::H160;
     use crate::block::State;
     use std::cmp::min;
 
@@ -385,44 +328,6 @@ mod tests {
     }
 
     #[test]
-    fn test_pick_peer_addrs() {
-        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17028);
-        let (_, _, generator,  _, _, locked_peers, _) = new_server_env(p2p_addr_1);
-
-        let peer_addr1 = generate_random_h160();
-        let peer_addr2 = generate_random_h160();
-        let peer_addr3 = generate_random_h160();
-
-        let mut peers = locked_peers.lock().unwrap();
-        peers.insert(&peer_addr1);
-        drop(peers);
-
-        assert!(generator.pick_peer_addrs().is_some());
-        let mut addrs = generator.pick_peer_addrs().unwrap();
-        assert!(addrs == vec![peer_addr1]);
-
-        peers = locked_peers.lock().unwrap();
-        peers.insert(&peer_addr2);
-        peers.insert(&peer_addr3);
-        drop(peers);
-
-        let mut all_addrs_combination: HashSet<Vec<H160>> = HashSet::new();
-
-        // When config = 3 (May need to change later)
-        all_addrs_combination.insert(vec![peer_addr1, peer_addr2]);
-        all_addrs_combination.insert(vec![peer_addr1, peer_addr3]);
-        all_addrs_combination.insert(vec![peer_addr2, peer_addr1]);
-        all_addrs_combination.insert(vec![peer_addr2, peer_addr3]);
-        all_addrs_combination.insert(vec![peer_addr3, peer_addr1]);
-        all_addrs_combination.insert(vec![peer_addr3, peer_addr2]);
-
-        for _ in 0..REPEAT_TEST_TIME {
-            addrs = generator.pick_peer_addrs().unwrap();
-            assert!(all_addrs_combination.get(&addrs).is_some());
-        }
-    }
-
-    #[test]
     fn test_pick_send_value() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17027);
         let (_, _, generator,  _, _, locked_peers, _) = new_server_env(p2p_addr_1);
@@ -471,6 +376,5 @@ mod tests {
                 val_set.insert(val.clone());
             }
         }
-
     }
 }
