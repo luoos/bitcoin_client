@@ -88,8 +88,9 @@ impl MemPool {
         for trans in content.trans.iter() {
             let inputs = &trans.transaction.inputs;
             for input in inputs.iter() {
-                if let Some(_) = self.input_tran_map.remove(input) {
+                if let Some((tx_hash,_)) = self.input_tran_map.remove(input) {
                     debug!("Remove conflicting input from mempool {:?}", input);
+                    self.transactions.remove(&tx_hash);
                 }
             }
         }
@@ -270,5 +271,22 @@ mod tests {
         assert!(!mempool.try_insert(&signed_tran_2));
         assert!(mempool.exist(&signed_tran_1.hash));
         assert!(!mempool.exist(&signed_tran_2.hash));
+    }
+
+    #[test]
+    fn test_remove_conflict_tx_inputs() {
+        let key = key_pair::random();
+        let mut mempool = MemPool::new();
+        let h256 = generate_random_hash();
+        let input = TxInput {pre_hash: h256, index: 0};
+        let signed_tran_1 = generate_signed_transaction(&key, vec![input.clone()], Vec::new());
+        sleep(time::Duration::from_millis(10));
+        let signed_tran_2 = generate_signed_transaction(&key, vec![input.clone()], Vec::new());
+        let content_2 = Content::new_with_trans(&vec![signed_tran_2.clone()]);
+        assert!(mempool.try_insert(&signed_tran_1));
+        assert!(mempool.exist(&signed_tran_1.hash));
+        assert!(!mempool.exist(&signed_tran_2.hash));
+        mempool.remove_conflict_tx_inputs(&content_2);
+        assert!(!mempool.exist(&signed_tran_1.hash));
     }
 }
