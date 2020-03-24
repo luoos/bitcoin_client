@@ -73,6 +73,10 @@ impl State {
     pub fn get(&self, key: &(H256, u32)) -> Option<&(u64, H160)> {
         return self.0.get(key);
     }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
 }
 
 impl Hashable for Block {

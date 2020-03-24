@@ -204,6 +204,16 @@ pub fn generate_random_h160() -> H160 {
     (&raw_bytes).into()
 }
 
+//State
+pub fn generate_random_state(inputs: Vec<(H256, u32)>, outputs: Vec<(u64, H160)>) -> State {
+    assert_eq!(inputs.len(), outputs.len());
+    let mut state = State::new();
+    for idx in 0..inputs.len() {
+        state.insert(inputs[idx], outputs[idx]);
+    }
+    state
+}
+
 ///Other
 // Generate 32-bytes array to set difficulty
 pub fn gen_difficulty_array(mut zero_cnt: i32) -> [u8; 32] {

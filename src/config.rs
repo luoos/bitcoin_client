@@ -17,3 +17,7 @@ pub static COINBASE_REWARD: u64 = 50; // reward for miner
 pub static RAND_INPUTS_NUM: usize = 4; // number of inputs in generate_random_txinput
 
 pub static RAND_OUTPUTS_NUM: usize = 4; // number of outputs in generate_random_txoutput
+
+pub static VALID_OUTPUTS_NUM: usize = 3; // number of valid tx_outputs in transaction_generator
+
+pub static REPEAT_TEST_TIME: usize = 20; // used for test repeatedly
