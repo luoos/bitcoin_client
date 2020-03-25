@@ -3,7 +3,7 @@ use crate::miner::Handle as MinerHandle;
 use crate::network::server::Handle as NetworkServerHandle;
 use crate::network::message::Message;
 use crate::blockchain::Blockchain;
-use crate::block::{PrintableBlock, PrintableContent};
+use crate::block::{PrintableBlock, PrintableContent, PrintableState};
 use crate::mempool::MemPool;
 
 use log::info;
@@ -148,6 +148,18 @@ impl Server {
 
                             let content_type = "Content-Type: text/html".parse::<Header>().unwrap();
                             let html = TEMPLATES.render("tx.html", &context).unwrap();
+                            let resp = Response::from_string(html)
+                                .with_header(content_type);
+                            req.respond(resp).unwrap();
+                        }
+                        "/blockchain/showstate" => {
+                            let cur_state = blockchain.lock().unwrap().tip_block_state();
+                            let pstate = PrintableState::from_state(&cur_state);
+                            let mut context = Context::new();
+                            context.insert("state", &pstate);
+
+                            let content_type = "Content-Type: text/html".parse::<Header>().unwrap();
+                            let html = TEMPLATES.render("state.html", &context).unwrap();
                             let resp = Response::from_string(html)
                                 .with_header(content_type);
                             req.respond(resp).unwrap();

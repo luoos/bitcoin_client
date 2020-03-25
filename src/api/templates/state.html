@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        {% block head %}
+        <title>{% block title %} {% endblock title %} Blockchain State Visualization</title>
+        <style type="text/css">
+                li {
+                    font: 18px/1 Tahoma,Helvetica,Arial,"\5b8b\4f53",sans-serif;
+                }
+            </style>
+        {% endblock head %}
+    </head>
+    <body>
+        <h2>State: </h2>
+        <ul>
+            {% for i in range(end=state.pair_num) %}
+                {% set input = state.inputs | nth(n=i) %}
+                {% set output = state.outputs | nth(n=i) %}
+                <li><strong>Transaction Hash</strong>: {{ input.pre_hash }}, <strong>Output Index</strong>: {{ input.index }}<br>
+                    <strong>Value</strong>: {{ output.val }}, <strong>Recipient</strong>: {{ output.rec_address }} </li>
+            {% endfor %}
+        </ul>
+    </body>
+</html>

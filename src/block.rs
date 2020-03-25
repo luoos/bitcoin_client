@@ -6,7 +6,7 @@ use chrono::Utc;
 use std::time::{UNIX_EPOCH, Duration};
 use std::collections::HashMap;
 use crate::crypto::hash::{H256, H160, Hashable};
-use crate::transaction::{SignedTransaction, TxInput, PrintableTransaction};
+use crate::transaction::{SignedTransaction, TxInput, PrintableTransaction, PrintableTxInput, PrintableTxOutput, TxOutput};
 use crate::crypto::merkle::MerkleTree;
 use crate::config::DIFFICULTY;
 use crate::helper::gen_difficulty_array;
@@ -52,6 +52,13 @@ pub struct PrintableContent {
 
 #[derive(Clone, Debug)]
 pub struct State (pub HashMap<(H256, u32), (u64, H160)>);
+
+#[derive(Serialize, Deserialize)]
+pub struct PrintableState {
+    pub inputs: Vec<PrintableTxInput>,
+    pub outputs: Vec<PrintableTxOutput>,
+    pub pair_num: usize,
+}
 
 impl State {
     pub fn new() -> Self {
@@ -309,6 +316,22 @@ impl PrintableContent {
             pcontents.push(pc);
         }
         pcontents
+    }
+}
+
+impl PrintableState {
+    pub fn from_state(state: &State) -> Self {
+        let mut inputs = Vec::<TxInput>::new();
+        let mut outputs = Vec::<TxOutput>::new();
+        for (input, output) in state.as_ref().iter() {
+            inputs.push(TxInput::new(input.0, input.1));
+            outputs.push(TxOutput::new(output.1, output.0));
+        }
+        let pinputs = PrintableTransaction::txinput_to_string_vec(&inputs);
+        let poutputs = PrintableTransaction::txoutput_to_string_vec(&outputs);
+        assert_eq!(pinputs.len(), poutputs.len());
+        let pair_num = pinputs.len();
+        Self{inputs: pinputs, outputs: poutputs, pair_num}
     }
 }
 
