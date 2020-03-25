@@ -131,6 +131,32 @@ fn generate_content() -> Content {
 }
 
 /// Transaction
+
+// Create valid transactions under current state (For now: Send to one peer & myself)
+pub fn generate_valid_tran(state: &State, account: &Account, rec_addr: &H160) -> Option<SignedTransaction> {
+    let (coins, balance) = state.coins_of(&account.addr);
+    if balance > 0 {
+        let transfer_val = gen_random_num(1, balance);
+        let mut acc = 0u64;
+        let mut tx_inputs = Vec::<TxInput>::new();
+        for (input, val) in coins.iter() {
+            tx_inputs.push(input.clone());
+            acc += val;
+            if acc >= transfer_val {
+                break;
+            }
+        }
+        let mut tx_outputs = Vec::<TxOutput>::new();
+        tx_outputs.push(TxOutput::new(rec_addr.clone(), transfer_val));
+        if acc > transfer_val {
+            tx_outputs.push(TxOutput::new(account.addr.clone(), acc-transfer_val));
+        }
+        let new_tran = generate_signed_transaction(&account.key_pair, tx_inputs, tx_outputs);
+        return Some(new_tran);
+    }
+    return None;
+}
+
 pub fn generate_signed_transaction(key: &Ed25519KeyPair,
         inputs: Vec<TxInput>, outputs: Vec<TxOutput>) -> SignedTransaction {
     let pub_key_bytes: Box<[u8]> = key.public_key().as_ref().into();
@@ -215,6 +241,7 @@ pub fn generate_random_state(inputs: Vec<(H256, u32)>, outputs: Vec<(u64, H160)>
 }
 
 ///Other
+
 // Generate 32-bytes array to set difficulty
 pub fn gen_difficulty_array(mut zero_cnt: i32) -> [u8; 32] {
     let mut difficulty : [u8; 32] = [std::u8::MAX; 32];
@@ -232,8 +259,61 @@ pub fn gen_difficulty_array(mut zero_cnt: i32) -> [u8; 32] {
     difficulty
 }
 
+pub fn gen_random_num(lo: u64, hi: u64) -> u64 {
+    // inclusive at both ends
+    let mut rng = thread_rng();
+    return rng.gen_range(lo, hi+1);
+}
+
 #[allow(dead_code)]
 pub fn generate_random_str() -> String {
     let rng = thread_rng();
     rand::distributions::Alphanumeric.sample_iter(rng).take(10).collect()
+}
+
+#[cfg(any(test, test_utilities))]
+pub mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::account::Account;
+    use crate::crypto::key_pair;
+    use crate::block::State;
+
+    #[test]
+    fn test_gen_valid_tran() {
+        let key_pair = Arc::new(key_pair::random());
+        let account = Arc::new(Account::new(&key_pair));
+        let key_pair_2 = Arc::new(key_pair::random());
+        let account_2 = Arc::new(Account::new(&key_pair_2));
+
+        let mut state = State::new();
+        let h256_1 = generate_random_hash();
+        let h256_2 = generate_random_hash();
+        let h256_3 = generate_random_hash();
+        let h160_1 = account.addr.clone();
+        let h160_2 = generate_random_h160();
+        state.insert((h256_1, 1), (3, h160_1));
+        state.insert((h256_2, 5), (7, h160_2));
+        state.insert((h256_3, 11), (17, h160_1));
+        let tran = generate_valid_tran(&state, &account, &h160_2);
+        assert!(tran.is_some());
+        let tran = generate_valid_tran(&state, &account_2, &h160_2);
+        assert!(!tran.is_some());
+
+        let mut state = State::new();
+        let h256_1 = generate_random_hash();
+        let h256_2 = generate_random_hash();
+        let h160_1 = account.addr.clone();
+        let h160_2 = generate_random_h160();
+        state.insert((h256_1, 1), (1, h160_1));
+        state.insert((h256_2, 5), (7, h160_2));
+        let tran = generate_valid_tran(&state, &account, &h160_2);
+        assert!(tran.is_some());
+        let tran = tran.unwrap();
+        assert!(tran.transaction.inputs.len() == 1);
+        assert!(tran.transaction.outputs.len() == 1);
+        assert!(tran.transaction.inputs[0] == TxInput::new(h256_1.clone(), 1));
+        assert!(tran.transaction.outputs[0] == TxOutput::new(h160_2.clone(), 1));
+    }
 }

@@ -6,7 +6,7 @@ use chrono::Utc;
 use std::time::{UNIX_EPOCH, Duration};
 use std::collections::HashMap;
 use crate::crypto::hash::{H256, H160, Hashable};
-use crate::transaction::{SignedTransaction, PrintableTransaction};
+use crate::transaction::{SignedTransaction, TxInput, PrintableTransaction};
 use crate::crypto::merkle::MerkleTree;
 use crate::config::DIFFICULTY;
 use crate::helper::gen_difficulty_array;
@@ -77,6 +77,18 @@ impl State {
 
     pub fn clear(&mut self) {
         self.0.clear();
+    }
+
+    pub fn coins_of(&self, addr: &H160) -> (HashMap<TxInput, u64>, u64) {
+        let mut coins: HashMap<TxInput, u64> = HashMap::new();
+        let mut balance = 0u64;
+        for ((tran_hash, index), (val, owner_addr)) in self.0.iter() {
+            if *owner_addr == *addr {
+                coins.insert(TxInput::new(tran_hash.clone(), *index), *val);
+                balance += *val;
+            }
+        }
+        return (coins, balance);
     }
 }
 
@@ -495,5 +507,25 @@ pub mod test {
         if let Some(_) = non_state {
             assert!(false);
         }
+    }
+
+    #[test]
+    fn test_state_coins_of() {
+        let mut state = State::new();
+        let h256_1 = generate_random_hash();
+        let h256_2 = generate_random_hash();
+        let h256_3 = generate_random_hash();
+        let h160_1 = generate_random_h160();
+        let h160_2 = generate_random_h160();
+        state.insert((h256_1, 1), (3, h160_1));
+        state.insert((h256_2, 5), (7, h160_2));
+        state.insert((h256_3, 11), (17, h160_1));
+        let (coins, balance) = state.coins_of(&h160_1);
+        assert_eq!(20, balance);
+        assert!(coins.contains_key(&TxInput::new(h256_1.clone(), 1)));
+        assert!(coins.contains_key(&TxInput::new(h256_3.clone(), 11)));
+        let (coins, balance) = state.coins_of(&h160_2);
+        assert_eq!(7, balance);
+        assert!(coins.contains_key(&TxInput::new(h256_2.clone(), 5)));
     }
 }
