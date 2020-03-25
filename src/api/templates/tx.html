@@ -12,7 +12,7 @@
     </head>
     <body>
         {% for c in contents %}
-        <h2>Block Index: {{ loop.index0 }}</h2>
+        <h2>Block Index: {{ c.index }}</h2>
             {% for t in c.trans %}
             <h3>Transaction Index: {{ loop.index0 }}</h3>
             <ul>

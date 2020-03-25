@@ -46,7 +46,8 @@ pub struct Content {
 
 #[derive(Serialize, Deserialize)]
 pub struct PrintableContent {
-    pub trans: Vec<PrintableTransaction>
+    pub trans: Vec<PrintableTransaction>,
+    pub index: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -289,9 +290,10 @@ impl Content {
 impl PrintableContent {
     pub fn from_content_vec(contents: &Vec<Content>) -> Vec<Self> {
         let mut pcontents = Vec::<Self>::new();
-        for c in contents {
+        let len = contents.len();
+        for (index, c) in contents.iter().enumerate() {
             let pts = PrintableTransaction::from_signedtx_vec(&c.trans);
-            let pc = Self { trans: pts };
+            let pc = Self { trans: pts, index: len - 1 - index};
             pcontents.push(pc);
         }
         pcontents
