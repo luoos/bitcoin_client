@@ -36,6 +36,7 @@ use crate::account::Account;
 use crate::peers::Peers;
 use crate::network::message::Message;
 use crate::crypto::key_pair;
+use ring::signature::KeyPair;
 
 fn main() {
     // parse command line arguments
@@ -95,6 +96,7 @@ fn main() {
     let key_pair = Arc::new(key_pair::random());
     let account = Arc::new(Account::new(&key_pair));
     let addr = account.addr;
+    info!("Client get started: address is {:?}, {:?}", addr, &key_pair.public_key());
 
     // create peer(for transaction)
     let peers = Arc::new(Mutex::new(Peers::new()));

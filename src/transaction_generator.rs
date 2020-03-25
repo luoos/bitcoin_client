@@ -57,7 +57,7 @@ impl Context {
                 if let Some(tran) = helper::generate_valid_tran(&state, &self.account, &rec_addr) {
                     let mut mempool = self.mempool.lock().unwrap();
                     if mempool.add_with_check(&tran) {
-                        info!("Added a new transaction! Now mempool has {} transaction", mempool.size());
+                        info!("Put a new transaction into client! Now mempool has {} transaction", mempool.size());
                         let vec = vec![tran.hash.clone()];
                         self.server.broadcast(Message::NewTransactionHashes(vec));
                     }

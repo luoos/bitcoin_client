@@ -192,7 +192,7 @@ impl Context {
 
         let mempool = self.mempool.lock().unwrap();
 
-        //Get content for new block from mempool
+        // Miner put transactions into block content from mempool!!
         let content = mempool.create_content(&self.key_pair);
         drop(mempool);
 

@@ -99,8 +99,8 @@ impl MemPool {
     pub fn create_content(&self, key_pair: &Ed25519KeyPair) -> Content {
         let mut trans = Vec::<SignedTransaction>::new();
 
-         let coinbase_trans = generate_signed_coinbase_transaction(key_pair);
-         trans.push(coinbase_trans);
+        let coinbase_trans = generate_signed_coinbase_transaction(key_pair);
+        trans.push(coinbase_trans);
 
         for (_, tran) in self.transactions.iter() {
             trans.push(tran.clone());

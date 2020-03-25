@@ -73,7 +73,7 @@ impl Blockchain {
                       &b.index, &b.hash, b.header.nonce, parent_hash);
 
                 self.blocks.insert(b.hash.clone(), b);
-                info!("Total number of blocks is {:?}, Length of longest chain is {:?}", self.blocks.len(), self.length());
+                info!("Length of longest chain is {:?}, Total number of blocks is {:?}", self.length(), self.blocks.len());
 
                 self.handle_orphan(&new_parent_hash);
             },
@@ -148,6 +148,7 @@ impl Blockchain {
         self.longest_hash.clone()
     }
 
+    // Get state of the longest chain(tip)
     pub fn tip_block_state(&self) -> State {
         self.states.get(&self.longest_hash).unwrap().clone()
     }
