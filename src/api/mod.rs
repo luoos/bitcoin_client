@@ -135,7 +135,7 @@ impl Server {
                             context.insert("blocks", &pblock);
 
                             let content_type = "Content-Type: text/html".parse::<Header>().unwrap();
-                            let html = TEMPLATES.render("block.html", &context).unwrap();
+                            let html = TEMPLATES.render("header.html", &context).unwrap();
                             let resp = Response::from_string(html)
                                 .with_header(content_type);
                             req.respond(resp).unwrap();

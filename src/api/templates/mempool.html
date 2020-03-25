@@ -19,18 +19,18 @@
             <li><strong>Signature</strong>: {{ t.signature }}</li>
             <li><strong>Public_key</strong>: {{ t.public_key }}</li>
             <li><strong>Intputs</strong>:
-            {% for i in t.inputs %}
-                <ul>
+                <ol>
+                {% for i in t.inputs %}
                     <li><strong>Pre_hash</strong>: {{ i.pre_hash }},  <strong>Index</strong>: {{ i.index }}</li>
-                </ul>
-            {% endfor %}
+                {% endfor %}
+                </ol>
             </li>
             <li><strong>Outputs</strong>:
-            {% for o in t.outputs %}
-                <ul>
+                <ol>
+                {% for o in t.outputs %}
                     <li><strong>Receiver_Address</strong>: {{ o.rec_address }},  <strong>Value</strong>: {{ o.val }}</li>
-                </ul>
-            {% endfor %}
+                {% endfor %}
+                </ol>
             </li>
         </ul>
         {% endfor %}

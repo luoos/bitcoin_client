@@ -169,7 +169,7 @@ fn main() {
         });
     }
 
-    thread::sleep(time::Duration::from_millis(100));
+    thread::sleep(time::Duration::from_millis(500));
     // introduce myself to network_peers
     server.broadcast(Message::Introduce(addr));
 

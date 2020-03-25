@@ -1,18 +1,30 @@
-# Principles of Blockchains
+# Bitcoin Client
 
-Welcome! This is the repository for ECE 598 PV: Principles of Blockchains, Spring 2020 at University of Illinois, Urbana-Champaign. [Main website of the course](https://courses.grainger.illinois.edu/ece598pv/sp2020/).
+## Run
 
-## Discussion
-We use Piazza for discussion.
+```shell
+# run 3 different instances (in 3 tabs)
+cargo run -- -vv --p2p 127.0.0.1:6000 --api 127.0.0.1:7000
+cargo run -- -vv --p2p 127.0.0.1:6001 --api 127.0.0.1:7001 -c 127.0.0.1:6000
+cargo run -- -vv --p2p 127.0.0.1:6002 --api 127.0.0.1:7002 -c 127.0.0.1:6001
 
-## Assignments
+# use url endpoint to start mining
+curl http://127.0.0.1:7000/miner/start?lambda=100000
+curl http://127.0.0.1:7001/miner/start?lambda=100000
+curl http://127.0.0.1:7002/miner/start?lambda=100000
 
-- [Assignment 1](Assignment1). Due date 12:30PM, Jan 28, 2020.
-- [Assignment 2](Assignment2). Due date 12:30PM, Feb 6, 2020.
+# use url endpoint to check info (change port for different instance)
+http://127.0.0.1:7000/blockchain/showheader # show headers of blockchain
+http://127.0.0.1:7000/blockchain/showtx     # show transactions in blockchain
+http://127.0.0.1:7000/blockchain/showstate  # show state of tip block
+http://127.0.0.1:7000/mempool/showtx        # show transactions in mempool
+```
 
-## Midterm Project
+```shell
+# script (note that these scripts use specific ports)
+./run.sh
+./start_mining.sh
 
-- [Team formation](https://forms.gle/e4UXyXrHUJfancqS6). Please form teams of 2 and fill in [this form](https://forms.gle/e4UXyXrHUJfancqS6). Illinois login is required to fill this form. Due date 12:30PM, Feb 4, 2020.
-
-## Policy
-Submissions later than due date will get 0 points.
+# kill
+./kill.sh
+```
