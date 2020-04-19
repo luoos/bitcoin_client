@@ -18,6 +18,8 @@ pub mod helper;
 pub mod mempool;
 pub mod transaction_generator;
 pub mod peers;
+#[allow(unused_variables)] // TODO: remove
+pub mod spread;
 
 use clap::clap_app;
 use crossbeam::channel;
@@ -78,8 +80,9 @@ fn main() {
     // create channels between server and worker
     let (msg_tx, msg_rx) = channel::unbounded();
 
+    let spreader = spread::get_spreader(config::SPREADER);
     // start the p2p server
-    let (server_ctx, server) = server::new(p2p_addr, msg_tx).unwrap();
+    let (server_ctx, server) = server::new(p2p_addr, msg_tx, spreader).unwrap();
     server_ctx.start().unwrap();
 
     // start the worker

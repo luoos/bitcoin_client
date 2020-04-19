@@ -1,5 +1,6 @@
 use super::message;
 use super::peer::{self, ReadResult, WriteResult};
+use crate::spread;
 use crossbeam::channel as cbchannel;
 use log::{debug, error, info, trace, warn};
 use mio::{self, net};
@@ -13,6 +14,7 @@ const MAX_EVENT: usize = 1024;
 pub fn new(
     addr: std::net::SocketAddr,
     msg_sink: cbchannel::Sender<(Vec<u8>, peer::Handle)>,
+    spreader: Box<dyn spread::Spreading + Send + Sync>,
 ) -> std::io::Result<(Context, Handle)> {
     let (control_signal_sender, control_signal_receiver) = channel::channel();
     let handle = Handle {
@@ -26,6 +28,7 @@ pub fn new(
         control_chan: control_signal_receiver,
         new_msg_chan: msg_sink,
         _handle: handle.clone(),
+        spreader: spreader,
     };
     Ok((ctx, handle))
 }
@@ -38,6 +41,7 @@ pub struct Context {
     control_chan: channel::Receiver<ControlSignal>,
     new_msg_chan: cbchannel::Sender<(Vec<u8>, peer::Handle)>,
     _handle: Handle,
+    spreader: Box<dyn spread::Spreading + Send + Sync>,
 }
 
 impl Context {
@@ -133,9 +137,7 @@ impl Context {
             }
             ControlSignal::BroadcastMessage(msg) => {
                 trace!("Processing BroadcastMessage command");
-                for peer_id in &self.peer_list {
-                    self.peers[*peer_id].handle.write(msg.clone());
-                }
+                self.spreader.spread(&self.peers, &self.peer_list, msg);
             }
         }
         Ok(())

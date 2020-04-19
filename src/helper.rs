@@ -10,6 +10,7 @@ use crate::transaction_generator;
 use crate::network::{worker, server};
 use crate::account::Account;
 use crate::peers::Peers;
+use crate::spread::{self, Spreader};
 
 use log::{info, error};
 use rand::{Rng,thread_rng};
@@ -25,7 +26,8 @@ pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context,
                                                 Arc<Mutex<Blockchain>>, Arc<Mutex<MemPool>>, Arc<Mutex<Peers>>,
                                                 Arc<Account>) {
     let (sender, receiver) = channel::unbounded();
-    let (server_ctx, server) = server::new(ipv4_addr, sender).unwrap();
+    let spreader = spread::get_spreader(Spreader::Default);
+    let (server_ctx, server) = server::new(ipv4_addr, sender, spreader).unwrap();
     server_ctx.start().unwrap();
 
     let key_pair = Arc::new(key_pair::random());

@@ -1,3 +1,5 @@
+use crate::spread::Spreader;
+
 pub static DIFFICULTY: i32 = 17; // number of leading zero
 
 pub static MINING_STEP: u32 = 8192; // number of mining step
@@ -21,3 +23,5 @@ pub static RAND_OUTPUTS_NUM: usize = 4; // number of outputs in generate_random_
 pub static VALID_OUTPUTS_NUM: usize = 3; // number of valid tx_outputs in transaction_generator
 
 pub static REPEAT_TEST_TIME: usize = 20; // used for test repeatedly
+
+pub static SPREADER: Spreader = Spreader::Default;
