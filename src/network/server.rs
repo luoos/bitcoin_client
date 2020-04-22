@@ -14,7 +14,7 @@ const MAX_EVENT: usize = 1024;
 pub fn new(
     addr: std::net::SocketAddr,
     msg_sink: cbchannel::Sender<(Vec<u8>, peer::Handle)>,
-    spreader: Box<dyn spread::Spreading + Send + Sync>,
+    spreader: Box<dyn spread::Spreading + Send>,
 ) -> std::io::Result<(Context, Handle)> {
     let (control_signal_sender, control_signal_receiver) = channel::channel();
     let handle = Handle {
@@ -41,7 +41,7 @@ pub struct Context {
     control_chan: channel::Receiver<ControlSignal>,
     new_msg_chan: cbchannel::Sender<(Vec<u8>, peer::Handle)>,
     _handle: Handle,
-    spreader: Box<dyn spread::Spreading + Send + Sync>,
+    spreader: Box<dyn spread::Spreading + Send>,
 }
 
 impl Context {
@@ -137,7 +137,18 @@ impl Context {
             }
             ControlSignal::BroadcastMessage(msg) => {
                 trace!("Processing BroadcastMessage command");
-                self.spreader.spread(&self.peers, &self.peer_list, msg);
+                match msg {
+                    message::Message::NewTransactionHashes(_) => {
+                        // only set delay for this message
+                        self.spreader.spread(&self.peers, &self.peer_list, msg);
+                    }
+                    _ => {
+                        for peer_id in &self.peer_list {
+                            // do not delay
+                            self.peers[*peer_id].handle.write(msg.clone());
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -245,7 +256,7 @@ impl Context {
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::WouldBlock {
                     trace!("Peer {} finished writing", peer_id);
-                // socket is not ready anymore, stop reading
+                    // socket is not ready anymore, stop reading
                 } else {
                     warn!("Error writing peer {}, disconnecting: {}", peer.addr, e);
                     self.peers.remove(peer_id);

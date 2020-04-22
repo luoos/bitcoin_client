@@ -162,7 +162,7 @@ impl Context {
     }
 
     // Procedures when new block found
-    fn found(&mut self, block: Block) {
+    pub(crate) fn found(&mut self, block: Block) {
         self.mined_num += 1;
         info!("Mined a block: {:?}, number of transactions: {:?}. Total mined: {}",
                 block.hash, block.content.trans.len(), self.mined_num);
@@ -242,11 +242,12 @@ pub mod tests {
     use std::thread;
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use crate::config::{BLOCK_SIZE_LIMIT, EASIEST_DIF};
+    use crate::spread::Spreader;
 
     #[test]
     fn test_miner() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17010);
-        let (_server_handle, mut miner, _, _blockchain, mempool, _, _) = new_server_env(p2p_addr_1);
+        let (_server_handle, mut miner, _, _blockchain, mempool, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
 
         //Must-be-done difficulty
         let mut difficulty: H256 = gen_difficulty_array(0).into();
@@ -280,9 +281,9 @@ pub mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17012);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17013);
 
-        let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1, _, _) = new_server_env(p2p_addr_1);
-        let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2, _, _) = new_server_env(p2p_addr_2);
-        let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3);
+        let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default);
+        let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default);
         blockchain_1.lock().unwrap().set_check_trans(false);
         blockchain_2.lock().unwrap().set_check_trans(false);
         blockchain_3.lock().unwrap().set_check_trans(false);

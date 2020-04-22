@@ -15,18 +15,21 @@ use crate::spread::{self, Spreader};
 use log::{info, error};
 use rand::{Rng,thread_rng};
 use rand::distributions::Distribution;
+use rand::seq::SliceRandom;
 use ring::signature::{KeyPair, Ed25519KeyPair};
 use ring::digest;
 use std::sync::{Arc, Mutex};
+use chrono::prelude::*;
 use std::net::SocketAddr;
 use crossbeam::channel;
 
 ///Network
-pub fn new_server_env(ipv4_addr: SocketAddr) -> (server::Handle, miner::Context, transaction_generator::Context,
+pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (server::Handle, miner::Context, transaction_generator::Context,
                                                 Arc<Mutex<Blockchain>>, Arc<Mutex<MemPool>>, Arc<Mutex<Peers>>,
                                                 Arc<Account>) {
     let (sender, receiver) = channel::unbounded();
-    let spreader = spread::get_spreader(Spreader::Default);
+    let (spreader, spreader_ctx) = spread::get_spreader(spreader_type);
+    spreader_ctx.start();
     let (server_ctx, server) = server::new(ipv4_addr, sender, spreader).unwrap();
     server_ctx.start().unwrap();
 
@@ -265,6 +268,18 @@ pub fn gen_random_num(lo: u64, hi: u64) -> u64 {
     // inclusive at both ends
     let mut rng = thread_rng();
     return rng.gen_range(lo, hi+1);
+}
+
+pub fn gen_shuffled_peer_list(peer_list : &Vec<usize>) -> Vec<usize>{
+    let mut peer_list_copy: Vec<usize> = peer_list.to_vec();
+    let mut rng = rand::thread_rng();
+    peer_list_copy.shuffle(&mut rng);
+    return peer_list_copy
+}
+
+pub fn get_current_time_in_nano() -> i64{
+    let now = Utc::now();
+    now.timestamp_nanos()
 }
 
 #[allow(dead_code)]

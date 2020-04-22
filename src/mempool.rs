@@ -141,6 +141,7 @@ mod tests {
     use crate::helper::*;
     use crate::block::{Block, Content};
     use crate::network::message::Message;
+    use crate::spread::Spreader;
     use crate::config::EASIEST_DIF;
     use crate::crypto::{key_pair, hash::Hashable};
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
@@ -204,9 +205,9 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17032);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17033);
 
-        let (_server_1, _miner_ctx_1, mut _generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1);
-        let (server_2, _miner_ctx_2, mut _generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2);
-        let (server_3, _miner_ctx_3, mut _generator_3, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3);
+        let (_server_1, _miner_ctx_1, mut _generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (server_2, _miner_ctx_2, mut _generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default);
+        let (server_3, _miner_ctx_3, mut _generator_3, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default);
         _blockchain_1.lock().unwrap().set_check_trans(false);
         _blockchain_2.lock().unwrap().set_check_trans(false);
         blockchain_3.lock().unwrap().set_check_trans(false);

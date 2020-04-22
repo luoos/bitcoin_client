@@ -19,6 +19,7 @@ pub mod mempool;
 pub mod transaction_generator;
 pub mod peers;
 #[allow(unused_variables)] // TODO: remove
+#[allow(dead_code)] // TODO: remove
 pub mod spread;
 
 use clap::clap_app;
@@ -80,7 +81,8 @@ fn main() {
     // create channels between server and worker
     let (msg_tx, msg_rx) = channel::unbounded();
 
-    let spreader = spread::get_spreader(config::SPREADER);
+    let (spreader, spreader_ctx) = spread::get_spreader(config::SPREADER);
+    spreader_ctx.start();
     // start the p2p server
     let (server_ctx, server) = server::new(p2p_addr, msg_tx, spreader).unwrap();
     server_ctx.start().unwrap();

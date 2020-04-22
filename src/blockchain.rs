@@ -270,6 +270,7 @@ mod tests {
     use super::*;
     use crate::crypto::hash::Hashable;
     use crate::helper::*;
+    use crate::spread::Spreader;
     use crate::crypto::key_pair;
     use crate::network::message::Message;
 
@@ -521,8 +522,8 @@ mod tests {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17051);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17052);
 
-        let (server_1, _, _, blockchain_1, _, _, account_1) = new_server_env(p2p_addr_1);
-        let (server_2, _, _, blockchain_2, _, _, account_2) = new_server_env(p2p_addr_2);
+        let (server_1, _, _, blockchain_1, _, _, account_1) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (server_2, _, _, blockchain_2, _, _, account_2) = new_server_env(p2p_addr_2, Spreader::Default);
 
         // server_1 online but no connections
         let addr_1 = account_1.addr;
