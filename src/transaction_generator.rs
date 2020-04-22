@@ -23,18 +23,18 @@ pub struct Context {
 }
 
 pub fn new(
-    server: &ServerHandle,
-    mempool: &Arc<Mutex<MemPool>>,
-    blockchain: &Arc<Mutex<Blockchain>>,
-    peers: &Arc<Mutex<Peers>>,
-    account: &Arc<Account>,
+    server: ServerHandle,
+    mempool: Arc<Mutex<MemPool>>,
+    blockchain: Arc<Mutex<Blockchain>>,
+    peers: Arc<Mutex<Peers>>,
+    account: Arc<Account>,
 ) -> Context {
     Context {
-        server: server.clone(),
-        mempool: Arc::clone(mempool),
-        blockchain: Arc::clone(blockchain),
-        peers: Arc::clone(peers),
-        account: Arc::clone(account),
+        server: server,
+        mempool: mempool,
+        blockchain: blockchain,
+        peers: peers,
+        account: account,
     }
 }
 

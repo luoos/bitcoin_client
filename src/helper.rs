@@ -34,7 +34,7 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (serve
     server_ctx.start().unwrap();
 
     let key_pair = Arc::new(key_pair::random());
-    let account = Arc::new(Account::new(&key_pair));
+    let account = Arc::new(Account::new(key_pair.clone()));
     let addr = account.addr;
 
     let peers = Arc::new(Mutex::new(Peers::new()));
@@ -47,13 +47,16 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (serve
     let mempool = MemPool::new();
     let mempool = Arc::new(Mutex::new(mempool));
 
-    let worker_ctx = worker::new(4, receiver, &server, &blockchain, &mempool, &peers, addr);
+    let worker_ctx = worker::new(4, receiver, server.clone(),
+        blockchain.clone(), mempool.clone(), peers.clone(), addr);
     worker_ctx.start();
 
-    let (miner_ctx, _miner) = miner::new(&server, &blockchain, &mempool, &key_pair);
+    let (miner_ctx, _miner) = miner::new(server.clone(),
+        blockchain.clone(), mempool.clone(), key_pair.clone());
 
     let transaction_generator_ctx =
-        transaction_generator::new(&server, &mempool, &blockchain, &peers, &account);
+        transaction_generator::new(server.clone(),
+            mempool.clone(), blockchain.clone(), peers.clone(), account.clone());
 
     (server, miner_ctx, transaction_generator_ctx, blockchain, mempool, peers, account)
 }
@@ -300,9 +303,9 @@ pub mod tests {
     #[test]
     fn test_gen_valid_tran() {
         let key_pair = Arc::new(key_pair::random());
-        let account = Arc::new(Account::new(&key_pair));
+        let account = Arc::new(Account::new(key_pair));
         let key_pair_2 = Arc::new(key_pair::random());
-        let account_2 = Arc::new(Account::new(&key_pair_2));
+        let account_2 = Arc::new(Account::new(key_pair_2));
 
         let mut state = State::new();
         let h256_1 = generate_random_hash();

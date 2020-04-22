@@ -48,22 +48,22 @@ pub struct Handle {
 }
 
 pub fn new(
-    server: &ServerHandle,
-    blockchain: &Arc<Mutex<Blockchain>>,
-    mempool: &Arc<Mutex<MemPool>>,
-    key_pair: &Arc<Ed25519KeyPair>,
+    server: ServerHandle,
+    blockchain: Arc<Mutex<Blockchain>>,
+    mempool: Arc<Mutex<MemPool>>,
+    key_pair: Arc<Ed25519KeyPair>,
 ) -> (Context, Handle) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
 
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
-        server: server.clone(),
-        blockchain: Arc::clone(blockchain),
-        mempool: Arc::clone(mempool),
+        server: server,
+        blockchain: blockchain,
+        mempool: mempool,
         nonce: 0,
         mined_num: 0,
-        key_pair: Arc::clone(key_pair),
+        key_pair: key_pair,
     };
 
     let handle = Handle {

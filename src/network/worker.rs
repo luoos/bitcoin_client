@@ -26,19 +26,19 @@ pub struct Context {
 pub fn new(
     num_worker: usize,
     msg_src: channel::Receiver<(Vec<u8>, peer::Handle)>,
-    server: &ServerHandle,
-    blockchain: &Arc<Mutex<Blockchain>>,
-    mempool: &Arc<Mutex<MemPool>>,
-    peer_addrs: &Arc<Mutex<Peers>>,
+    server: ServerHandle,
+    blockchain: Arc<Mutex<Blockchain>>,
+    mempool: Arc<Mutex<MemPool>>,
+    peer_addrs: Arc<Mutex<Peers>>,
     self_addr: H160,
 ) -> Context {
     Context {
         msg_chan: msg_src,
         num_worker,
-        server: server.clone(),
-        blockchain: Arc::clone(blockchain),
-        mempool: Arc::clone(mempool),
-        peer_addrs: Arc::clone(peer_addrs),
+        server: server,
+        blockchain: blockchain,
+        mempool: mempool,
+        peer_addrs: peer_addrs,
         self_addr,
     }
 }

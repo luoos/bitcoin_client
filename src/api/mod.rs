@@ -62,18 +62,18 @@ lazy_static! {
 impl Server {
     pub fn start(
         addr: std::net::SocketAddr,
-        miner: &MinerHandle,
-        network: &NetworkServerHandle,
-        blockchain: &Arc<Mutex<Blockchain>>,
-        mempool: &Arc<Mutex<MemPool>>,
+        miner: MinerHandle,
+        network: NetworkServerHandle,
+        blockchain: Arc<Mutex<Blockchain>>,
+        mempool: Arc<Mutex<MemPool>>,
     ) {
         let handle = HTTPServer::http(&addr).unwrap();
         let server = Self {
             handle,
-            miner: miner.clone(),
-            network: network.clone(),
-            blockchain: Arc::clone(blockchain),
-            mempool: Arc::clone(mempool),
+            miner: miner,
+            network: network,
+            blockchain: blockchain,
+            mempool: mempool,
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {

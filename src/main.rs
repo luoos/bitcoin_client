@@ -99,7 +99,7 @@ fn main() {
 
     // create user account
     let key_pair = Arc::new(key_pair::random());
-    let account = Arc::new(Account::new(&key_pair));
+    let account  = Arc::new(Account::new(key_pair.clone()));
     let addr = account.addr;
     info!("Client get started: address is {:?}, {:?}", addr, &key_pair.public_key());
 
@@ -114,11 +114,11 @@ fn main() {
 
     // start the transaction_generator
     let transaction_generator_ctx = transaction_generator::new(
-        &server,
-        &mempool,
-        &blockchain,
-        &peers,
-        &account,
+        server.clone(),
+        mempool.clone(),
+        blockchain.clone(),
+        peers.clone(),
+        account.clone(),
     );
     transaction_generator_ctx.start();
 
@@ -126,20 +126,20 @@ fn main() {
     let worker_ctx = worker::new(
         p2p_workers,
         msg_rx,
-        &server,
-        &blockchain,
-        &mempool,
-        &peers,
+        server.clone(),
+        blockchain.clone(),
+        mempool.clone(),
+        peers.clone(),
         account.addr,
     );
     worker_ctx.start();
 
     // start the miner
     let (miner_ctx, miner) = miner::new(
-        &server,
-        &blockchain,
-        &mempool,
-        &key_pair,
+        server.clone(),
+        blockchain.clone(),
+        mempool.clone(),
+        key_pair.clone(),
     );
     miner_ctx.start();
 
@@ -183,10 +183,10 @@ fn main() {
     // start the API server
     ApiServer::start(
         api_addr,
-        &miner,
-        &server,
-        &blockchain,
-        &mempool,
+        miner.clone(),
+        server.clone(),
+        blockchain.clone(),
+        mempool.clone(),
     );
 
     loop {
