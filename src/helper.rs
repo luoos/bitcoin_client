@@ -34,8 +34,10 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (serve
     server_ctx.start().unwrap();
 
     let key_pair = Arc::new(key_pair::random());
-    let account = Arc::new(Account::new(key_pair.clone()));
+    let account = Arc::new(Account::new(ipv4_addr.port(),key_pair.clone()));
     let addr = account.addr;
+    let pub_key = account.get_pub_key();
+    let port = account.port;
 
     let peers = Arc::new(Mutex::new(Peers::new()));
 
@@ -48,7 +50,7 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (serve
     let mempool = Arc::new(Mutex::new(mempool));
 
     let worker_ctx = worker::new(4, receiver, server.clone(),
-        blockchain.clone(), mempool.clone(), peers.clone(), addr);
+        blockchain.clone(), mempool.clone(), peers.clone(), addr, pub_key, port);
     worker_ctx.start();
 
     let (miner_ctx, _miner) = miner::new(server.clone(),
@@ -303,9 +305,11 @@ pub mod tests {
     #[test]
     fn test_gen_valid_tran() {
         let key_pair = Arc::new(key_pair::random());
-        let account = Arc::new(Account::new(key_pair));
+        let port = 14159;
+        let account = Arc::new(Account::new(port, key_pair));
+        let port2 = 26535;
         let key_pair_2 = Arc::new(key_pair::random());
-        let account_2 = Arc::new(Account::new(key_pair_2));
+        let account_2 = Arc::new(Account::new(port2, key_pair_2));
 
         let mut state = State::new();
         let h256_1 = generate_random_hash();

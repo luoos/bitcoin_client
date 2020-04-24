@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use crate::block::Block;
 use crate::crypto::hash::{H256, H160};
 use crate::transaction::SignedTransaction;
+use ring::signature::ED25519_PUBLIC_KEY_LEN;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Message {
@@ -14,6 +15,6 @@ pub enum Message {
     NewTransactionHashes(Vec<H256>),
     GetTransactions(Vec<H256>),
     Transactions(Vec<SignedTransaction>),
-    NewAddresses(Vec<H160>),
-    Introduce(H160),
+    NewPeers(Vec<(H160, Box<[u8; ED25519_PUBLIC_KEY_LEN]>, u16)>),
+    Introduce((H160, Box<[u8; ED25519_PUBLIC_KEY_LEN]>, u16)),
 }

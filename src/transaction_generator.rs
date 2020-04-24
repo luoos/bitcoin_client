@@ -9,7 +9,7 @@ use crate::network::message::Message;
 use crate::mempool::MemPool;
 use crate::helper;
 use crate::crypto::hash::H160;
-use crate::config::{TRANSACTION_GENERATE_INTERVAL};
+use crate::config::TRANSACTION_GENERATE_INTERVAL;
 use crate::peers::Peers;
 use crate::blockchain::Blockchain;
 use crate::account::Account;
@@ -42,7 +42,7 @@ impl Context {
     pub fn start(mut self) {
         thread::Builder::new()
             .name("transaction_generator".to_string())
-            .spawn(move|| {
+            .spawn(move || {
                 self.transaction_generator_loop();
             })
             .unwrap();
@@ -112,6 +112,8 @@ mod tests {
     use crate::helper::*;
     use crate::config::REPEAT_TEST_TIME;
     use crate::spread::Spreader;
+    use crate::crypto::key_pair;
+    use ring::signature::{ED25519_PUBLIC_KEY_LEN, KeyPair};
 
     #[test]
     fn test_transaction_relay() {
@@ -119,7 +121,7 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17022);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17023);
 
-        let (_server_1, _miner_ctx_1, mut generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
         let (server_2, _miner_ctx_2, mut generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default);
         let (server_3, _miner_ctx_3, mut generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default);
 
@@ -171,16 +173,31 @@ mod tests {
     #[test]
     fn test_random_peer_addr() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17028);
-        let (_, _, generator,  _, _, locked_peers, _) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (_, _, generator, _, _, locked_peers, _) = new_server_env(p2p_addr_1, Spreader::Default);
 
         let peer_addr1 = generate_random_h160();
         let peer_addr2 = generate_random_h160();
         let peer_addr3 = generate_random_h160();
 
+        let peer_key_pair1 = key_pair::random();
+        let peer_key_pair2 = key_pair::random();
+        let peer_key_pair3 = key_pair::random();
+
+        let mut bytes_pub_key1: [u8; ED25519_PUBLIC_KEY_LEN] = [0; ED25519_PUBLIC_KEY_LEN];
+        bytes_pub_key1[..].copy_from_slice(&peer_key_pair1.public_key().as_ref()[..]);
+        let mut bytes_pub_key2: [u8; ED25519_PUBLIC_KEY_LEN] = [0; ED25519_PUBLIC_KEY_LEN];
+        bytes_pub_key2[..].copy_from_slice(&peer_key_pair2.public_key().as_ref()[..]);
+        let mut bytes_pub_key3: [u8; ED25519_PUBLIC_KEY_LEN] = [0; ED25519_PUBLIC_KEY_LEN];
+        bytes_pub_key3[..].copy_from_slice(&peer_key_pair3.public_key().as_ref()[..]);
+
+        let port1 = 1111u16;
+        let port2 = 2222u16;
+        let port3 = 3333u16;
+
         let mut peers = locked_peers.lock().unwrap();
-        peers.insert(&peer_addr1);
-        peers.insert(&peer_addr2);
-        peers.insert(&peer_addr3);
+        peers.insert(&peer_addr1, Box::new(bytes_pub_key1), port1);
+        peers.insert(&peer_addr2, Box::new(bytes_pub_key2), port2);
+        peers.insert(&peer_addr3, Box::new(bytes_pub_key3), port3);
         drop(peers);
 
         for _ in 0..REPEAT_TEST_TIME {

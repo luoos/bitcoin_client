@@ -12,6 +12,8 @@ use crate::crypto::hash::{H256, Hashable, H160};
 use crate::mempool::MemPool;
 use crate::peers::Peers;
 
+use ring::signature::ED25519_PUBLIC_KEY_LEN;
+
 #[derive(Clone)]
 pub struct Context {
     msg_chan: channel::Receiver<(Vec<u8>, peer::Handle)>,
@@ -19,8 +21,10 @@ pub struct Context {
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     mempool: Arc<Mutex<MemPool>>,
-    peer_addrs: Arc<Mutex<Peers>>,
+    peers_info: Arc<Mutex<Peers>>,
     self_addr: H160,
+    self_pub_key: Box<[u8; ED25519_PUBLIC_KEY_LEN]>,
+    self_port: u16
 }
 
 pub fn new(
@@ -29,17 +33,21 @@ pub fn new(
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     mempool: Arc<Mutex<MemPool>>,
-    peer_addrs: Arc<Mutex<Peers>>,
+    peers_info: Arc<Mutex<Peers>>,
     self_addr: H160,
+    self_pub_key: Box<[u8; ED25519_PUBLIC_KEY_LEN]>,
+    self_port: u16
 ) -> Context {
     Context {
         msg_chan: msg_src,
         num_worker,
-        server: server,
-        blockchain: blockchain,
-        mempool: mempool,
-        peer_addrs: peer_addrs,
+        server,
+        blockchain,
+        mempool,
+        peers_info,
         self_addr,
+        self_pub_key,
+        self_port
     }
 }
 
@@ -146,38 +154,44 @@ impl Context {
                         self.server.broadcast(Message::NewTransactionHashes(new_hashes));
                     }
                 }
-                Message::NewAddresses(addrs) => {
+                Message::NewPeers(content) => {
                     //Broadcast all known address(including itself) to p2p_peers
-                    debug!("Server {:?} receive address{:?}!!", self.self_addr, addrs);
-                    let mut peer_addrs = self.peer_addrs.lock().unwrap();
-                    let mut new_addrs = Vec::<H160>::new();
-                    for a in addrs.iter() {
-                        if a.clone() != self.self_addr && !peer_addrs.contains(a) {
-                            peer_addrs.insert(a);
-                            new_addrs.push(a.clone());
+                    debug!("Server {:?} receive address{:?}!!", self.self_addr, content);
+                    let mut peers_info = self.peers_info.lock().unwrap();
+                    let mut new_peers = Vec::<(H160, Box<[u8; ED25519_PUBLIC_KEY_LEN]>, u16)>::new();
+                    for info in content.iter() {
+                        let addr = info.0.clone();
+                        let pub_key = info.1.clone();
+                        let port = info.2;
+                        if addr != self.self_addr && !peers_info.contains(&addr) {
+                            peers_info.insert(&addr, pub_key, port);
+                            new_peers.push(info.clone());
                         }
                     }
-                    if new_addrs.len() > 0 {
-                        self.server.broadcast(Message::NewAddresses(new_addrs));
+                    if new_peers.len() > 0 {
+                        self.server.broadcast(Message::NewPeers(new_peers));
                     }
                 }
-                Message::Introduce(addr) => {
+                Message::Introduce(content) => {
                     /* Welcome new peer joining:
                        Add new-coming address to peer_addrs & send back all known address(including itself) & broadcast new address to p2p_peers
                        Sync longest chain to new peer
                     */
+                    let addr = content.0;
+                    let pub_key = content.1.clone();
+                    let port = content.2;
                     debug!("Server {:?} receive IntroduceAddr {:?}!!", self.self_addr, addr);
                     let blockchain = self.blockchain.lock().unwrap();
-                    let mut peer_addrs = self.peer_addrs.lock().unwrap();
+                    let mut peers_info = self.peers_info.lock().unwrap();
 
-                    if !peer_addrs.contains(&addr) {
-                        peer_addrs.insert(&addr);
-                        let mut all_addrs = peer_addrs.get_all_peers_addrs();
+                    if !peers_info.contains(&addr) {
+                        peers_info.insert(&addr, pub_key, port);
+                        let mut all_peers_info = peers_info.get_all_peers_info();
                         // Also include self_address
-                        all_addrs.push(self.self_addr);
-                        peer.write(Message::NewAddresses(all_addrs));
+                        all_peers_info.push((self.self_addr, self.self_pub_key.clone(), self.self_port));
+                        peer.write(Message::NewPeers(all_peers_info));
 
-                        self.server.broadcast(Message::NewAddresses(vec![addr]));
+                        self.server.broadcast(Message::NewPeers(vec![content]));
                     }
 
                     peer.write(Message::NewBlockHashes(blockchain.hash_chain()));

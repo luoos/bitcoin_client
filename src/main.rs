@@ -98,9 +98,11 @@ fn main() {
         });
 
     // create user account
+    let port = p2p_addr.port();
     let key_pair = Arc::new(key_pair::random());
-    let account  = Arc::new(Account::new(key_pair.clone()));
+    let account  = Arc::new(Account::new(port, key_pair.clone()));
     let addr = account.addr;
+    let pub_key = account.get_pub_key();
     info!("Client get started: address is {:?}, {:?}", addr, &key_pair.public_key());
 
     // create peer(for transaction)
@@ -131,6 +133,8 @@ fn main() {
         mempool.clone(),
         peers.clone(),
         account.addr,
+        pub_key.clone(),
+        port
     );
     worker_ctx.start();
 
@@ -178,7 +182,7 @@ fn main() {
 
     thread::sleep(time::Duration::from_millis(500));
     // introduce myself to network_peers
-    server.broadcast(Message::Introduce(addr));
+    server.broadcast(Message::Introduce((addr, pub_key, port)));
 
     // start the API server
     ApiServer::start(
