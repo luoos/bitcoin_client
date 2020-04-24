@@ -225,14 +225,14 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18032);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18033);
 
-        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Trickle);
-        let (server_2, _miner_ctx_2, generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Trickle);
-        let (server_3, _miner_ctx_3, generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Trickle);
+        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Trickle, false);
+        let (server_2, _miner_ctx_2, generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Trickle, false);
+        let (server_3, _miner_ctx_3, generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Trickle, false);
 
         let peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, peers_1);
+        connect_peers(&server_2, &peers_1);
         let peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, peers_2);
+        connect_peers(&server_3, &peers_2);
 
         generator_1.generating();
         sleep(time::Duration::from_millis((TRICKLE_GAP_TIME + 100) as u64));
@@ -269,14 +269,14 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19032);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19033);
 
-        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Diffusion);
-        let (server_2, _miner_ctx_2, generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Diffusion);
-        let (server_3, _miner_ctx_3, generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Diffusion);
+        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Diffusion, false);
+        let (server_2, _miner_ctx_2, generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Diffusion, false);
+        let (server_3, _miner_ctx_3, generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Diffusion, false);
 
         let peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, peers_1);
+        connect_peers(&server_2, &peers_1);
         let peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, peers_2);
+        connect_peers(&server_3, &peers_2);
 
         generator_1.generating();
         sleep(time::Duration::from_millis((DIFFUSION_BASE_GAP_TIME) as u64 + 50u64));

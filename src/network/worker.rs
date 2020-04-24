@@ -24,7 +24,8 @@ pub struct Context {
     peers_info: Arc<Mutex<Peers>>,
     self_addr: H160,
     self_pub_key: Box<[u8; ED25519_PUBLIC_KEY_LEN]>,
-    self_port: u16
+    self_port: u16,
+    supernode: bool,
 }
 
 pub fn new(
@@ -47,7 +48,8 @@ pub fn new(
         peers_info,
         self_addr,
         self_pub_key,
-        self_port
+        self_port,
+        supernode: false,
     }
 }
 
@@ -61,6 +63,10 @@ impl Context {
                 warn!("Worker thread {} exited", i);
             });
         }
+    }
+
+    pub fn as_supernode(&mut self) {
+        self.supernode = true;
     }
 
     fn worker_loop(&self) {
@@ -105,7 +111,9 @@ impl Context {
                     let mut missing_parents = Vec::<H256>::new();
                     for b in blocks.iter() {
                         if blockchain.insert_with_check(b) {
-                            mempool.remove_trans(&b.content.get_trans_hashes());
+                            if !self.supernode {
+                                mempool.remove_trans(&b.content.get_trans_hashes());
+                            }
                             new_hashes.push(b.hash.clone());
                         }
                         if let Some(parent_hash) = blockchain.missing_parent(&b.hash) {
@@ -150,7 +158,7 @@ impl Context {
                         }
                     }
                     drop(mempool);
-                    if new_hashes.len() > 0 {
+                    if new_hashes.len() > 0  && !self.supernode {
                         self.server.broadcast(Message::NewTransactionHashes(new_hashes));
                     }
                 }

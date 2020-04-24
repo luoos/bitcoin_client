@@ -318,4 +318,5 @@ pub mod tests {
         assert!(!verify_with_origin_type(&t_2, &(key.public_key()), &signature));
         assert!(!verify_with_origin_type(&t, &(key_2.public_key()), &signature));
     }
+
 }

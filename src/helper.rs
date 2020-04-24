@@ -24,7 +24,7 @@ use std::net::SocketAddr;
 use crossbeam::channel;
 
 ///Network
-pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (server::Handle, miner::Context, transaction_generator::Context,
+pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supernode: bool) -> (server::Handle, miner::Context, transaction_generator::Context,
                                                 Arc<Mutex<Blockchain>>, Arc<Mutex<MemPool>>, Arc<Mutex<Peers>>,
                                                 Arc<Account>) {
     let (sender, receiver) = channel::unbounded();
@@ -49,8 +49,11 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (serve
     let mempool = MemPool::new();
     let mempool = Arc::new(Mutex::new(mempool));
 
-    let worker_ctx = worker::new(4, receiver, server.clone(),
+    let mut worker_ctx = worker::new(4, receiver, server.clone(),
         blockchain.clone(), mempool.clone(), peers.clone(), addr, pub_key, port);
+    if is_supernode {
+        worker_ctx.as_supernode();
+    }
     worker_ctx.start();
 
     let (miner_ctx, _miner) = miner::new(server.clone(),
@@ -63,9 +66,9 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader) -> (serve
     (server, miner_ctx, transaction_generator_ctx, blockchain, mempool, peers, account)
 }
 
-pub fn connect_peers(server: &server::Handle, known_peers: Vec<SocketAddr>) {
+pub fn connect_peers(server: &server::Handle, known_peers: &Vec<SocketAddr>) {
     for peer_addr in known_peers {
-        match server.connect(peer_addr) {
+        match server.connect(*peer_addr) {
             Ok(_) => {
                 info!("Connected to outgoing peer {}", &peer_addr);
             }

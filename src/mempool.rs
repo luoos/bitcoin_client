@@ -2,6 +2,7 @@ use crate::crypto::hash::H256;
 use crate::transaction::{SignedTransaction, TxInput};
 use crate::block::Content;
 use crate::config::POOL_SIZE_LIMIT;
+use crate::helper;
 
 use std::collections::HashMap;
 use log::debug;
@@ -11,6 +12,7 @@ use crate::helper::generate_signed_coinbase_transaction;
 pub struct MemPool {
     pub transactions: HashMap<H256, SignedTransaction>,
     pub input_tran_map: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
+    timestamp_map: HashMap<H256, i64>,
 }
 
 impl MemPool {
@@ -21,6 +23,7 @@ impl MemPool {
         Self {
             transactions,
             input_tran_map,
+            timestamp_map: HashMap::new(),
         }
     }
 
@@ -59,12 +62,14 @@ impl MemPool {
         // remove conflict trans
         for conf_hash in to_remove_hash.iter() {
             self.transactions.remove(conf_hash);
+            self.timestamp_map.remove(conf_hash);
         }
 
         for input in tran.transaction.inputs.iter() {
             self.input_tran_map.insert(input.clone(), (tran.hash, ts));
         }
         self.transactions.insert(tran.hash.clone(), tran.clone());
+        self.timestamp_map.insert(tran.hash.clone(), helper::get_current_time_in_nano());
         return true;
     }
 
@@ -73,6 +78,7 @@ impl MemPool {
         for hash in trans.iter() {
             if let Some(_) = self.transactions.get(&hash) {
                 self.transactions.remove(&hash);
+                self.timestamp_map.remove(&hash);
             } else {
                 debug!("{:?} not exist in the mempool!", hash);
             }
@@ -90,6 +96,7 @@ impl MemPool {
                 if let Some((tx_hash,_)) = self.input_tran_map.remove(input) {
                     debug!("Remove conflicting input from mempool {:?}", input);
                     self.transactions.remove(&tx_hash);
+                    self.timestamp_map.remove(&tx_hash);
                 }
             }
         }
@@ -205,17 +212,17 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17032);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17033);
 
-        let (_server_1, _miner_ctx_1, mut _generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
-        let (server_2, _miner_ctx_2, mut _generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default);
-        let (server_3, _miner_ctx_3, mut _generator_3, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default);
+        let (_server_1, _miner_ctx_1, mut _generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        let (server_2, _miner_ctx_2, mut _generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default, false);
+        let (server_3, _miner_ctx_3, mut _generator_3, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default, false);
         _blockchain_1.lock().unwrap().set_check_trans(false);
         _blockchain_2.lock().unwrap().set_check_trans(false);
         blockchain_3.lock().unwrap().set_check_trans(false);
 
         let peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, peers_1);
+        connect_peers(&server_2, &peers_1);
         let peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, peers_2);
+        connect_peers(&server_3, &peers_2);
 
         let t_1 = generate_random_signed_transaction();
         let t_2 = generate_random_signed_transaction();

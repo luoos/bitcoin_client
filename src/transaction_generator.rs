@@ -121,14 +121,14 @@ mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17022);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17023);
 
-        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
-        let (server_2, _miner_ctx_2, mut generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default);
-        let (server_3, _miner_ctx_3, mut generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default);
+        let (_server_1, _miner_ctx_1, mut generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        let (server_2, _miner_ctx_2, mut generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default, false);
+        let (server_3, _miner_ctx_3, mut generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default, false);
 
         let peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, peers_1);
+        connect_peers(&server_2, &peers_1);
         let peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, peers_2);
+        connect_peers(&server_3, &peers_2);
 
         generator_1.generating();
         sleep(time::Duration::from_millis(100));
@@ -171,9 +171,52 @@ mod tests {
     }
 
     #[test]
+    fn test_supernode_no_relay_trans() {
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17085);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17086);
+        let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17087);
+
+        let (_server_1, _miner_ctx_1, mut generator_1,  _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        // server 2 is supernode
+        let (server_2, _miner_ctx_2, _, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default, true);
+        let (server_3, _miner_ctx_3, mut generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default, false);
+
+        let peers_1 = vec![p2p_addr_1];
+        connect_peers(&server_2, &peers_1);
+        let peers_2 = vec![p2p_addr_2];
+        connect_peers(&server_3, &peers_2);
+
+        generator_1.generating();
+        sleep(time::Duration::from_millis(100));
+
+        let pool_1 = mempool_1.lock().unwrap();
+        let pool_2 = mempool_2.lock().unwrap();
+        let pool_3 = mempool_3.lock().unwrap();
+        assert_eq!(pool_1.size(), 1);
+        assert_eq!(pool_1.size(), pool_2.size());
+        assert_eq!(pool_3.size(), 0);
+        drop(pool_1);
+        drop(pool_2);
+        drop(pool_3);
+
+        generator_3.generating();
+        sleep(time::Duration::from_millis(100));
+
+        let pool_1 = mempool_1.lock().unwrap();
+        let pool_2 = mempool_2.lock().unwrap();
+        let pool_3 = mempool_3.lock().unwrap();
+        assert_eq!(pool_1.size(), 1);
+        assert_eq!(pool_2.size(), 2);
+        assert_eq!(pool_3.size(), 1);
+        drop(pool_1);
+        drop(pool_2);
+        drop(pool_3);
+    }
+
+    #[test]
     fn test_random_peer_addr() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17028);
-        let (_, _, generator, _, _, locked_peers, _) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (_, _, generator,  _, _, locked_peers, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
 
         let peer_addr1 = generate_random_h160();
         let peer_addr2 = generate_random_h160();

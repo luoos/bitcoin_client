@@ -28,3 +28,18 @@ http://127.0.0.1:7000/mempool/showtx        # show transactions in mempool
 # kill
 ./kill.sh
 ```
+
+### Script for Final Project
+
+```shell
+python3 gen_script.py
+
+# run
+./run_server.sh
+./run_supernode.sh
+./run_mining.sh
+
+# kill
+./kill_supernode.sh
+./kill_server.sh
+```

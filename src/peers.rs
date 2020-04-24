@@ -61,10 +61,10 @@ mod test {
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17063);
         let p2p_addr_4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17064);
 
-        let (server_1, _, _, _, _, peers_1, account_1) = new_server_env(p2p_addr_1, Spreader::Default);
-        let (server_2, _, _, _, _, peers_2, account_2) = new_server_env(p2p_addr_2, Spreader::Default);
-        let (server_3, _, _, _, _, peers_3, account_3) = new_server_env(p2p_addr_3, Spreader::Default);
-        let (server_4, _, _, _, _, peers_4, account_4) = new_server_env(p2p_addr_4, Spreader::Default);
+        let (server_1, _, _, _, _, peers_1, account_1) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        let (server_2, _, _, _, _, peers_2, account_2) = new_server_env(p2p_addr_2, Spreader::Default, false);
+        let (server_3, _, _, _, _, peers_3, account_3) = new_server_env(p2p_addr_3, Spreader::Default, false);
+        let (server_4, _, _, _, _, peers_4, account_4) = new_server_env(p2p_addr_4, Spreader::Default, false);
 
         let addr_1 = account_1.addr;
         let addr_2 = account_2.addr;
@@ -99,7 +99,7 @@ mod test {
 
         // server_2 online & connect to server_1
         let server_peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, server_peers_1.clone());
+        connect_peers(&server_2, &server_peers_1);
         thread::sleep(time::Duration::from_millis(100));
 
         server_2.broadcast(Message::Introduce((addr_2, pub_key_2.clone(), port_2)));
@@ -115,7 +115,7 @@ mod test {
 
         // server_3 online & connect to server_2
         let server_peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, server_peers_2.clone());
+        connect_peers(&server_3, &server_peers_2);
         thread::sleep(time::Duration::from_millis(100));
 
         server_3.broadcast(Message::Introduce((addr_3, pub_key_3, port_3)));
@@ -133,7 +133,7 @@ mod test {
 
         // server_4 online & connect to server_1,2
         let server_peers_12 = vec![p2p_addr_1, p2p_addr_2];
-        connect_peers(&server_4, server_peers_12.clone());
+        connect_peers(&server_4, &server_peers_12);
         thread::sleep(time::Duration::from_millis(100));
 
         server_4.broadcast(Message::Introduce((addr_4, pub_key_4, port_4)));

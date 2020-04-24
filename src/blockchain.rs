@@ -522,8 +522,8 @@ mod tests {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17051);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17052);
 
-        let (server_1, _, _, blockchain_1, _, _, account_1) = new_server_env(p2p_addr_1, Spreader::Default);
-        let (server_2, _, _, blockchain_2, _, _, account_2) = new_server_env(p2p_addr_2, Spreader::Default);
+        let (server_1, _, _, blockchain_1, _, _, account_1) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        let (server_2, _, _, blockchain_2, _, _, account_2) = new_server_env(p2p_addr_2, Spreader::Default, false);
 
         // server_1 online but no connections
         let addr_1 = account_1.addr;
@@ -554,7 +554,7 @@ mod tests {
 
         // server_2 online & connect to server_1
         let server_peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, server_peers_1.clone());
+        connect_peers(&server_2, &server_peers_1);
         thread::sleep(time::Duration::from_millis(100));
 
         server_2.broadcast(Message::Introduce((addr_2, pub_key2, port_2)));

@@ -247,7 +247,7 @@ pub mod tests {
     #[test]
     fn test_miner() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17010);
-        let (_server_handle, mut miner, _, _blockchain, mempool, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
+        let (_server_handle, mut miner, _, _blockchain, mempool, _, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
 
         //Must-be-done difficulty
         let mut difficulty: H256 = gen_difficulty_array(0).into();
@@ -281,18 +281,18 @@ pub mod tests {
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17012);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17013);
 
-        let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default);
-        let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default);
-        let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default);
+        let (_server_1, mut miner_ctx_1, _, blockchain_1, _mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        let (server_2, mut miner_ctx_2, _, blockchain_2, _mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default, false);
+        let (server_3, mut miner_ctx_3, _, blockchain_3, _mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Default, false);
         blockchain_1.lock().unwrap().set_check_trans(false);
         blockchain_2.lock().unwrap().set_check_trans(false);
         blockchain_3.lock().unwrap().set_check_trans(false);
 
         // bilateral connection!!
         let peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, peers_1.clone());
+        connect_peers(&server_2, &peers_1);
         let peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, peers_2.clone());
+        connect_peers(&server_3, &peers_2);
 
         let chain_1 = blockchain_1.lock().unwrap();
         let difficulty = chain_1.difficulty();

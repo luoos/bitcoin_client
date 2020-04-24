@@ -1,7 +1,5 @@
 use serde::Serialize;
 use crate::miner::Handle as MinerHandle;
-use crate::network::server::Handle as NetworkServerHandle;
-use crate::network::message::Message;
 use crate::blockchain::Blockchain;
 use crate::block::{PrintableBlock, PrintableContent, PrintableState};
 use crate::mempool::MemPool;
@@ -20,7 +18,6 @@ use crate::transaction::{PrintableTransaction, SignedTransaction};
 pub struct Server {
     handle: HTTPServer,
     miner: MinerHandle,
-    network: NetworkServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     mempool: Arc<Mutex<MemPool>>,
 }
@@ -63,7 +60,6 @@ impl Server {
     pub fn start(
         addr: std::net::SocketAddr,
         miner: MinerHandle,
-        network: NetworkServerHandle,
         blockchain: Arc<Mutex<Blockchain>>,
         mempool: Arc<Mutex<MemPool>>,
     ) {
@@ -71,14 +67,12 @@ impl Server {
         let server = Self {
             handle,
             miner: miner,
-            network: network,
             blockchain: blockchain,
             mempool: mempool,
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
                 let miner = server.miner.clone();
-                let network = server.network.clone();
                 let blockchain = Arc::clone(&server.blockchain);
                 let mempool = Arc::clone(&server.mempool);
                 thread::spawn(move || {
@@ -122,10 +116,6 @@ impl Server {
                         }
                         "/miner/pause" => {
                             miner.pause();
-                            respond_json!(req, true, "ok");
-                        }
-                        "/network/ping" => {
-                            network.broadcast(Message::Ping(String::from("Test ping")));
                             respond_json!(req, true, "ok");
                         }
                         "/blockchain/showheader" => {
