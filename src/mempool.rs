@@ -5,6 +5,7 @@ use crate::config::POOL_SIZE_LIMIT;
 use crate::helper;
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use log::debug;
 use ring::signature::Ed25519KeyPair;
 use crate::helper::generate_signed_coinbase_transaction;
@@ -12,18 +13,16 @@ use crate::helper::generate_signed_coinbase_transaction;
 pub struct MemPool {
     pub transactions: HashMap<H256, SignedTransaction>,
     pub input_tran_map: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
-    timestamp_map: HashMap<H256, i64>,
+    pub ts_addr_map: HashMap<H256, Vec<(SocketAddr, i64)>>,
 }
 
 impl MemPool {
     // Create an empty mempool
     pub fn new() -> Self {
-        let transactions: HashMap<H256, SignedTransaction> = HashMap::new();
-        let input_tran_map: HashMap<TxInput, (H256, u64)> = HashMap::<TxInput, (H256, u64)>::new();
         Self {
-            transactions,
-            input_tran_map,
-            timestamp_map: HashMap::new(),
+            transactions: HashMap::new(),
+            input_tran_map: HashMap::new(),
+            ts_addr_map: HashMap::new(),
         }
     }
 
@@ -44,6 +43,15 @@ impl MemPool {
         return self.try_insert(tran);
     }
 
+    pub fn insert_ts_and_addr(&mut self, hash: H256, addr: SocketAddr) {
+        if let Some(v) = self.ts_addr_map.get_mut(&hash) {
+            v.push((addr, helper::get_current_time_in_nano()));
+        } else {
+            let v = vec![(addr, helper::get_current_time_in_nano())];
+            self.ts_addr_map.insert(hash, v);
+        }
+    }
+
     // try insert transaction if no conflict input
     // or the transaction has the minimal timestamp among conflict trans
     fn try_insert(&mut self, tran: &SignedTransaction) -> bool {
@@ -62,14 +70,12 @@ impl MemPool {
         // remove conflict trans
         for conf_hash in to_remove_hash.iter() {
             self.transactions.remove(conf_hash);
-            self.timestamp_map.remove(conf_hash);
         }
 
         for input in tran.transaction.inputs.iter() {
             self.input_tran_map.insert(input.clone(), (tran.hash, ts));
         }
         self.transactions.insert(tran.hash.clone(), tran.clone());
-        self.timestamp_map.insert(tran.hash.clone(), helper::get_current_time_in_nano());
         return true;
     }
 
@@ -78,7 +84,6 @@ impl MemPool {
         for hash in trans.iter() {
             if let Some(_) = self.transactions.get(&hash) {
                 self.transactions.remove(&hash);
-                self.timestamp_map.remove(&hash);
             } else {
                 debug!("{:?} not exist in the mempool!", hash);
             }
@@ -96,7 +101,6 @@ impl MemPool {
                 if let Some((tx_hash,_)) = self.input_tran_map.remove(input) {
                     debug!("Remove conflicting input from mempool {:?}", input);
                     self.transactions.remove(&tx_hash);
-                    self.timestamp_map.remove(&tx_hash);
                 }
             }
         }
@@ -292,5 +296,47 @@ mod tests {
         assert!(!mempool.exist(&signed_tran_2.hash));
         mempool.remove_conflict_tx_inputs(&content_2);
         assert!(!mempool.exist(&signed_tran_1.hash));
+    }
+
+    #[test]
+    fn test_ts_addr_map() {
+        let mut mempool = MemPool::new();
+        let h256 = generate_random_hash();
+        let h256_2 = generate_random_hash();
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17031);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17032);
+
+        mempool.insert_ts_and_addr(h256, p2p_addr_1);
+        assert_eq!(1, mempool.ts_addr_map.len());
+        assert_eq!(1, mempool.ts_addr_map.get(&h256).unwrap().len());
+        mempool.insert_ts_and_addr(h256, p2p_addr_2);
+        assert_eq!(1, mempool.ts_addr_map.len());
+        assert_eq!(2, mempool.ts_addr_map.get(&h256).unwrap().len());
+        mempool.insert_ts_and_addr(h256_2, p2p_addr_1);
+        assert_eq!(2, mempool.ts_addr_map.len());
+    }
+
+    #[test]
+    fn test_supernode_receive_all_hashes() {
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17137);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17238);
+        let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17339);
+
+        let (server_1, _, _, _, _, _, _) = new_server_env(p2p_addr_1, Spreader::Default, false);
+        let (server_2, _, _, _, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Default, true);
+        let (server_3, _, _, _, _, _, _) = new_server_env(p2p_addr_3, Spreader::Default, false);
+
+        let peers_1 = vec![p2p_addr_1];
+        connect_peers(&server_2, &peers_1);
+        let peers_2 = vec![p2p_addr_2];
+        connect_peers(&server_3, &peers_2);
+
+        let hash = generate_random_hash();
+        server_1.broadcast(Message::NewTransactionHashes(vec![hash]));
+        sleep(time::Duration::from_millis(100));
+        assert_eq!(1, mempool_2.lock().unwrap().ts_addr_map.len());
+        server_3.broadcast(Message::NewTransactionHashes(vec![hash]));
+        sleep(time::Duration::from_millis(100));
+        assert_eq!(2, mempool_2.lock().unwrap().ts_addr_map.get(&hash).unwrap().len());
     }
 }

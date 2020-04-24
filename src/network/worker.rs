@@ -131,7 +131,12 @@ impl Context {
                 Message::NewTransactionHashes(hashes) => {
                     //Check whether the transactions are already in mempool/blockchain; if not,sending GetTransactions to ask for them.
                     debug!("NewTransactionHashes message received: {:?}", hashes);
-                    let mempool  = self.mempool.lock().unwrap();
+                    let mut mempool  = self.mempool.lock().unwrap();
+                    if self.supernode {
+                        for h in hashes.iter() {
+                            mempool.insert_ts_and_addr(h.clone(), peer.addr.clone());
+                        }
+                    }
                     let to_get: Vec<H256> = hashes.into_iter()
                                 .filter(|h|!mempool.exist(h)).collect();
                     drop(mempool);

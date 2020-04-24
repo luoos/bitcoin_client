@@ -213,7 +213,7 @@ pub struct Context {
 
 #[derive(Clone)]
 pub struct Handle {
-    addr: std::net::SocketAddr,
+    pub addr: std::net::SocketAddr,
     write_queue: channel::Sender<Vec<u8>>,
 }
 
