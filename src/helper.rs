@@ -22,6 +22,10 @@ use std::sync::{Arc, Mutex};
 use chrono::prelude::*;
 use std::net::SocketAddr;
 use crossbeam::channel;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
 
 ///Network
 pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supernode: bool) -> (server::Handle, miner::Context, transaction_generator::Context,
@@ -288,6 +292,30 @@ pub fn gen_shuffled_peer_list(peer_list : &Vec<usize>) -> Vec<usize>{
 pub fn get_current_time_in_nano() -> i64{
     let now = Utc::now();
     now.timestamp_nanos()
+}
+
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+        where P: AsRef<Path>, {
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+
+pub fn load_network_structure() -> Option<HashMap<i32, Vec<i32>>> {
+    if let Ok(lines) = read_lines("./network.txt") {
+        let mut map: HashMap<i32, Vec<i32>> = HashMap::new();
+        for line in lines {
+            if let Ok(l) = line {
+                let mut split_colon = l.split(":");
+                let key = split_colon.next().unwrap().parse::<i32>().unwrap();
+                let neighbors: Vec<i32> = split_colon.next().unwrap()
+                        .split(",").map(|x| x.parse::<i32>().unwrap()).collect();
+                map.insert(key, neighbors);
+            }
+        }
+        return Some(map)
+    } else {
+        return None
+    }
 }
 
 #[allow(dead_code)]
