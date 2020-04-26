@@ -9,7 +9,7 @@ use crate::crypto::hash::{Hashable, H256, H160};
 use crate::config::COINBASE_REWARD;
 
 ///UTXO model transaction
-#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone, Hash)]
 pub struct SignedTransaction {
     pub transaction: Transaction,
     pub hash: H256,
@@ -17,7 +17,7 @@ pub struct SignedTransaction {
     pub public_key: Box<[u8]>,
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone, Hash)]
 pub struct Transaction {
     pub inputs: Vec<TxInput>,
     pub outputs: Vec<TxOutput>,
@@ -39,7 +39,7 @@ pub struct TxInput {
     pub index: u32,   // Index in previous transaction's outputs vector
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Eq, PartialEq, Serialize, Deserialize, Debug, Default, Clone, Hash)]
 pub struct TxOutput {
     pub rec_address: H160, // Recipient's address
     pub val: u64,        // Value to transfer

@@ -149,6 +149,7 @@ fn run_regular_server(matches: ArgMatches) {
         miner.clone(),
         blockchain.clone(),
         mempool.clone(),
+        peers.clone(),
     );
 
     loop {
@@ -226,6 +227,7 @@ fn run_supernode(matches: ArgMatches) {
         worker_ctx.start();
 
         helper::connect_peers(&server, &known_peers);
+        server.broadcast(Message::Introduce((account.addr, pub_key, addr.port())));
     }
 
     let (msg_tx, _) = channel::unbounded();
@@ -245,6 +247,7 @@ fn run_supernode(matches: ArgMatches) {
         miner.clone(),  // Fake
         blockchain.clone(),  // Fake
         mempool.clone(),
+        peers.clone(),
     );
 
     loop {

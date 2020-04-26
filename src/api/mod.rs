@@ -14,12 +14,15 @@ use url::Url;
 use tera::{Tera, Context};
 use std::sync::{Arc, Mutex};
 use crate::transaction::{PrintableTransaction, SignedTransaction};
+use crate::peers::Peers;
+use crate::network::estimator::{start_first_timestamp_estimate, check_right_count};
 
 pub struct Server {
     handle: HTTPServer,
     miner: MinerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     mempool: Arc<Mutex<MemPool>>,
+    peers : Arc<Mutex<Peers>>,
 }
 
 #[derive(Serialize)]
@@ -62,19 +65,22 @@ impl Server {
         miner: MinerHandle,
         blockchain: Arc<Mutex<Blockchain>>,
         mempool: Arc<Mutex<MemPool>>,
+        peers : Arc<Mutex<Peers>>,
     ) {
         let handle = HTTPServer::http(&addr).unwrap();
         let server = Self {
             handle,
-            miner: miner,
-            blockchain: blockchain,
-            mempool: mempool,
+            miner,
+            blockchain,
+            mempool,
+            peers,
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
                 let miner = server.miner.clone();
                 let blockchain = Arc::clone(&server.blockchain);
                 let mempool = Arc::clone(&server.mempool);
+                let peers = server.peers.clone();
                 thread::spawn(move || {
                     // a valid url requires a base
                     let base_url = Url::parse(&format!("http://{}/", &addr)).unwrap();
@@ -167,6 +173,16 @@ impl Server {
                             let resp = Response::from_string(html)
                                 .with_header(content_type);
                             req.respond(resp).unwrap();
+                        }
+                        "/estimator/ft" => {
+                            let mem = mempool.lock().unwrap();
+                            let res = start_first_timestamp_estimate(&mem.transactions, &mem.ts_addr_map);
+                            println!("before peer_info");
+                            let peer_info = peers.lock().unwrap();
+                            println!("peer_info {:?}", peer_info.addrs);
+                            let correct_count = check_right_count(&res, &peer_info.info_map);
+
+                            respond_json!(req, true, correct_count.to_string());
                         }
                         _ => {
                             let content_type =

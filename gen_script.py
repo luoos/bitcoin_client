@@ -11,10 +11,10 @@ MINING_LAMBDA = 1400000
 
 SUPERNODE_P2P_PORT = 9000
 SUPERNODE_API_PORT = 9090
-SUPERNODE_PROBE = 2
+SUPERNODE_PROBE = 1
 
-NODE_CNT = 10
-DEGREE = 3
+NODE_CNT = 50
+DEGREE = 8
 
 def generate_start_server_script(G):
     started_node = set()
