@@ -25,3 +25,5 @@ pub static VALID_OUTPUTS_NUM: usize = 3; // number of valid tx_outputs in transa
 pub static REPEAT_TEST_TIME: usize = 20; // used for test repeatedly
 
 pub static SPREADER: Spreader = Spreader::Diffusion;
+
+pub static EPOCH_MS: i64 = 5000; // millisecond

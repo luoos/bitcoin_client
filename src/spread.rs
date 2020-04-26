@@ -1,6 +1,8 @@
-use crate::network::{peer, message};
+use crate::network::peer;
+use crate::network::message::Message;
 use crate::network::peer::Handle;
 use crate::helper;
+use crate::config::EPOCH_MS;
 
 use std::thread;
 use std::sync::{Mutex, Arc};
@@ -14,7 +16,7 @@ use std::collections::HashMap;
 extern crate timer;
 
 pub trait Spreading {
-    fn spread(&self, peers: &slab::Slab<peer::Context>, peer_index: &Vec<usize>, msg: message::Message);
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_index: &Vec<usize>, msg: Message);
 }
 
 #[derive(Copy, Clone)]
@@ -26,41 +28,14 @@ pub enum Spreader {
     DandelionPlus,
 }
 
-struct DefaultSpreader {
-    pub timer: MessageTimer<(i64, Handle, message::Message)>,
-    guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
-}
-
-fn new_base() -> (MessageTimer<(i64, Handle, message::Message)>, Arc<Mutex<HashMap<i64, Guard>>>, Context) {
-    let (sender, receiver) = channel();
-    let timer = MessageTimer::new(sender);
-    let guard_map = Arc::new(Mutex::new(HashMap::new()));
-    let context = Context { receiver, guard_map: guard_map.clone() };
-
-    return (timer, guard_map, context);
-}
-
-impl Spreading for DefaultSpreader {
-    fn spread(&self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: message::Message) {
-        let mut map = self.guard_map.lock().unwrap();
-        for peer_id in peer_list {
-            let now_nano = helper::get_current_time_in_nano();
-            let guard = self.timer.schedule_with_delay(chrono::Duration::milliseconds(0),
-                                                       (now_nano, peers[*peer_id].handle.clone(), msg.clone()));
-            map.insert(now_nano, guard);
-        }
-    }
-}
-
-impl DefaultSpreader {
-    pub fn new() -> (Self, Context) {
-        let (timer, guard_map, context) = new_base();
-        (DefaultSpreader { timer, guard_map }, context)
-    }
+#[derive(Clone)]
+pub enum TimerTask {
+    PeerWrite(i64, Handle, Message),
+    ResetEpoch(i64, Arc<Mutex<usize>>),
 }
 
 pub struct Context {
-    pub receiver: Receiver<(i64, Handle, message::Message)>,
+    pub receiver: Receiver<TimerTask>,
     guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
 }
 
@@ -68,12 +43,17 @@ impl Context {
     pub fn message_loop(&mut self) {
         loop {
             match self.receiver.recv() {
-                Ok(content) => {
-                    // TODO may need to check the concerning handle peer exist
-                    let handle = content.1;
-                    let msg = content.2;
-                    handle.write(msg);
-                    self.guard_map.lock().unwrap().remove(&content.0);
+                Ok(task) => {
+                    match task {
+                        TimerTask::PeerWrite(nano, handle, msg) => {
+                            handle.write(msg);
+                            self.guard_map.lock().unwrap().remove(&nano);
+                        }
+                        TimerTask::ResetEpoch(nano, target_index) => {
+                            *target_index.lock().unwrap() = usize::max_value();
+                            self.guard_map.lock().unwrap().remove(&nano);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -90,10 +70,43 @@ impl Context {
     }
 }
 
+struct DefaultSpreader {
+    pub timer: MessageTimer<TimerTask>,
+    guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
+}
+
+fn new_base() -> (MessageTimer<TimerTask>, Arc<Mutex<HashMap<i64, Guard>>>, Context) {
+    let (sender, receiver) = channel();
+    let timer = MessageTimer::new(sender);
+    let guard_map = Arc::new(Mutex::new(HashMap::new()));
+    let context = Context { receiver, guard_map: guard_map.clone() };
+
+    return (timer, guard_map, context);
+}
+
+impl Spreading for DefaultSpreader {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+        let mut map = self.guard_map.lock().unwrap();
+        for peer_id in peer_list {
+            let now_nano = helper::get_current_time_in_nano();
+            let guard = self.timer.schedule_with_delay(chrono::Duration::milliseconds(0),
+                                                       TimerTask::PeerWrite(now_nano, peers[*peer_id].handle.clone(), msg.clone()));
+            map.insert(now_nano, guard);
+        }
+    }
+}
+
+impl DefaultSpreader {
+    pub fn new() -> (Self, Context) {
+        let (timer, guard_map, context) = new_base();
+        (DefaultSpreader { timer, guard_map }, context)
+    }
+}
+
 const TRICKLE_GAP_TIME: i64 = 200;
 
 struct TrickleSpreader {
-    pub timer: MessageTimer<(i64, Handle, message::Message)>,
+    pub timer: MessageTimer<TimerTask>,
     guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
 }
 
@@ -105,13 +118,13 @@ impl TrickleSpreader {
 }
 
 impl Spreading for TrickleSpreader {
-    fn spread(&self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: message::Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
         let shuffled_peers_list = helper::gen_shuffled_peer_list(peer_list);
         let mut map = self.guard_map.lock().unwrap();
         for (i, peer_id) in shuffled_peers_list.iter().enumerate() {
             let now_nano = helper::get_current_time_in_nano();
             let guard = self.timer.schedule_with_delay(chrono::Duration::milliseconds(TRICKLE_GAP_TIME * (i + 1) as i64),
-                                                       (now_nano, peers[*peer_id].handle.clone(), msg.clone()));
+                                                       TimerTask::PeerWrite(now_nano, peers[*peer_id].handle.clone(), msg.clone()));
             map.insert(now_nano, guard);
         }
     }
@@ -121,7 +134,7 @@ const DIFFUSION_BASE_GAP_TIME: i64 = 100;
 const DIFFUSION_RATE: f64 = 1.5;
 
 struct DiffusionSpreader {
-    timer: MessageTimer<(i64, Handle, message::Message)>,
+    timer: MessageTimer<TimerTask>,
     guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
 }
 
@@ -133,14 +146,14 @@ impl DiffusionSpreader {
 }
 
 impl Spreading for DiffusionSpreader {
-    fn spread(&self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: message::Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
         let mut gap_time = DIFFUSION_BASE_GAP_TIME;
         let shuffled_peers_list = helper::gen_shuffled_peer_list(peer_list);
         let mut map = self.guard_map.lock().unwrap();
         for peer_id in shuffled_peers_list.iter() {
             let now_nano = helper::get_current_time_in_nano();
             let guard = self.timer.schedule_with_delay(chrono::Duration::milliseconds(gap_time),
-                                                       (now_nano, peers[*peer_id].handle.clone(), msg.clone()));
+                                                       TimerTask::PeerWrite(now_nano, peers[*peer_id].handle.clone(), msg.clone()));
             gap_time = (gap_time as f64 * DIFFUSION_RATE) as i64;
             map.insert(now_nano, guard);
         }
@@ -148,25 +161,54 @@ impl Spreading for DiffusionSpreader {
 }
 
 struct DandelionSpreader {
-    timer: MessageTimer<(i64, Handle, message::Message)>,
+    timer: MessageTimer<TimerTask>,
     guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
+    target_index: Arc<Mutex<usize>>,
+    epoch_period_ms: i64,
 }
 
 impl DandelionSpreader {
     pub fn new() -> (Self, Context) {
         let (timer, guard_map, context) = new_base();
-        (DandelionSpreader { timer, guard_map }, context)
+        (DandelionSpreader {
+            timer, guard_map,
+            target_index: Arc::new(Mutex::new(usize::max_value())),
+            epoch_period_ms: EPOCH_MS },
+        context)
+    }
+
+    #[cfg(any(test))]
+    fn set_epoch_period(&mut self, period: i64) {
+        self.epoch_period_ms = period;
     }
 }
 
 impl Spreading for DandelionSpreader {
-    fn spread(&self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: message::Message) {
-        // TODO
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+        // check phase 1 or 2
+
+        // run phase 2
+
+        // phase 1
+        let target_index: usize = *self.target_index.lock().unwrap();
+        if let Some(peer) = peers.get(target_index) {
+            peer.handle.write(msg);
+        } else if peer_list.len() > 0 {
+            let random_i = helper::gen_random_num(0, peer_list.len() as u64 - 1) as usize;
+            // Arc::get_mut(&mut self.target_index).unwrap() = peer_list[random_i as usize];
+            let peer_list_index = peer_list[random_i];
+            *self.target_index.lock().unwrap() = peer_list_index;
+            peers[peer_list_index].handle.write(msg);
+            let now_nano = helper::get_current_time_in_nano();
+            let guard = self.timer.schedule_with_delay(chrono::Duration::microseconds(self.epoch_period_ms),
+                TimerTask::ResetEpoch(now_nano, self.target_index.clone()));
+            self.guard_map.lock().unwrap().insert(now_nano, guard);
+        }
     }
 }
 
 struct DandelionPlusSpreader {
-    timer: MessageTimer<(i64, Handle, message::Message)>,
+    timer: MessageTimer<TimerTask>,
     guard_map: Arc<Mutex<HashMap<i64, Guard>>>,
 }
 
@@ -178,7 +220,7 @@ impl DandelionPlusSpreader {
 }
 
 impl Spreading for DandelionPlusSpreader {
-    fn spread(&self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: message::Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
         // TODO
     }
 }
@@ -214,9 +256,12 @@ mod tests {
     use std::net::{SocketAddr, IpAddr, Ipv4Addr};
     use std::thread::sleep;
     use std::time;
+    use slab;
 
     use crate::helper::*;
     use super::*;
+    use crate::network::peer;
+    use crate::network::message::Message;
 
 
     #[test]
@@ -305,5 +350,30 @@ mod tests {
         assert_eq!(pool_1.size(), 1);
         assert_eq!(pool_1.size(), pool_2.size());
         assert_eq!(pool_2.size(), pool_3.size());
+    }
+
+    #[test]
+    fn test_dandelion_reset_epoch() {
+        let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18234);
+        let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18335);
+        let (_server_1, _miner_ctx_1, _, _blockchain_1, _, _, _) = new_server_env(p2p_addr_1, Spreader::Diffusion, false);
+
+        let stream = std::net::TcpStream::connect(p2p_addr_1).unwrap();
+        let mio_stream = mio::net::TcpStream::from_stream(stream).unwrap();
+        let (peer_ctx, handle) = peer::new(mio_stream, peer::Direction::Outgoing).unwrap();
+        let mut peers = slab::Slab::<peer::Context>::new();
+        let vacant = peers.vacant_entry();
+        let key: usize = vacant.key();
+        let mut peer_list = Vec::<usize>::new();
+        vacant.insert(peer_ctx);
+        peer_list.push(key);
+        let msg = Message::Ping("He".to_string());
+        let (mut dandelion_sreapder, ctx) = DandelionSpreader::new();
+        ctx.start();
+        dandelion_sreapder.set_epoch_period(10);
+        dandelion_sreapder.spread(&peers, &peer_list, msg.clone());
+        assert_eq!(key, *dandelion_sreapder.target_index.lock().unwrap());
+        thread::sleep(time::Duration::from_millis(15));
+        assert_eq!(usize::max_value(), *dandelion_sreapder.target_index.lock().unwrap());
     }
 }
