@@ -20,6 +20,7 @@ pub struct Context {
     blockchain: Arc<Mutex<Blockchain>>,
     peers: Arc<Mutex<Peers>>,
     account: Arc<Account>,
+    dandelion: bool,
 }
 
 pub fn new(
@@ -28,13 +29,15 @@ pub fn new(
     blockchain: Arc<Mutex<Blockchain>>,
     peers: Arc<Mutex<Peers>>,
     account: Arc<Account>,
+    dandelion: bool,
 ) -> Context {
     Context {
-        server: server,
-        mempool: mempool,
-        blockchain: blockchain,
-        peers: peers,
-        account: account,
+        server,
+        mempool,
+        blockchain,
+        peers,
+        account,
+        dandelion,
     }
 }
 
@@ -58,8 +61,13 @@ impl Context {
                     let mut mempool = self.mempool.lock().unwrap();
                     if mempool.add_with_check(&tran) {
                         info!("Put a new transaction into client! Now mempool has {} transaction", mempool.size());
-                        let vec = vec![tran.hash.clone()];
-                        self.server.broadcast(Message::NewTransactionHashes(vec));
+                        if self.dandelion {
+                            let vec_trans = vec![tran];
+                            self.server.broadcast(Message::NewDandelionTransactions(vec_trans));
+                        } else {
+                            let vec_hash = vec![tran.hash.clone()];
+                            self.server.broadcast(Message::NewTransactionHashes(vec_hash));
+                        }
                     }
                 }
             }
@@ -96,8 +104,13 @@ impl Context {
         let new_t = helper::generate_random_signed_transaction_from_keypair(&self.account.key_pair);
         let mut mempool = self.mempool.lock().unwrap();
         if mempool.add_with_check(&new_t) {
-            let vec = vec![new_t.hash.clone()];
-            self.server.broadcast(Message::NewTransactionHashes(vec));
+            if self.dandelion {
+                let vec_trans = vec![new_t];
+                self.server.broadcast(Message::NewDandelionTransactions(vec_trans));
+            } else {
+                let vec_hash = vec![new_t.hash.clone()];
+                self.server.broadcast(Message::NewTransactionHashes(vec_hash));
+            }
         }
         drop(mempool);
     }

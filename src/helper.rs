@@ -3,7 +3,7 @@ use crate::blockchain::Blockchain;
 use crate::block::*;
 use crate::crypto::hash::{H256, H160};
 use crate::crypto::key_pair;
-use crate::config::{RAND_INPUTS_NUM, RAND_OUTPUTS_NUM, COINBASE_REWARD, EASIEST_DIF};
+use crate::config::*;
 use crate::miner;
 use crate::mempool::MemPool;
 use crate::transaction_generator;
@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use chrono::prelude::*;
 use std::net::SocketAddr;
 use crossbeam::channel;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -32,7 +32,19 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supern
                                                 Arc<Mutex<Blockchain>>, Arc<Mutex<MemPool>>, Arc<Mutex<Peers>>,
                                                 Arc<Account>) {
     let (sender, receiver) = channel::unbounded();
-    let (spreader, spreader_ctx) = spread::get_spreader(spreader_type);
+
+    let peers = Arc::new(Mutex::new(Peers::new()));
+
+    let mut blockchain = Blockchain::new();
+    let difficulty: H256 = gen_difficulty_array(EASIEST_DIF).into();
+    blockchain.change_difficulty(&difficulty);
+    let blockchain =  Arc::new(Mutex::new(blockchain));
+
+    let mempool = Arc::new(Mutex::new(MemPool::new()));
+
+    let using_dandelion =  spreader_type == Spreader::Dandelion || spreader_type == Spreader::DandelionPlus;
+
+    let (spreader, spreader_ctx) = spread::get_spreader(spreader_type, mempool.clone());
     spreader_ctx.start();
     let (server_ctx, server) = server::new(ipv4_addr, sender, spreader).unwrap();
     server_ctx.start().unwrap();
@@ -42,16 +54,6 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supern
     let addr = account.addr;
     let pub_key = account.get_pub_key();
     let port = account.port;
-
-    let peers = Arc::new(Mutex::new(Peers::new()));
-
-    let mut blockchain = Blockchain::new();
-    let difficulty: H256 = gen_difficulty_array(EASIEST_DIF).into();
-    blockchain.change_difficulty(&difficulty);
-    let blockchain =  Arc::new(Mutex::new(blockchain));
-
-    let mempool = MemPool::new();
-    let mempool = Arc::new(Mutex::new(mempool));
 
     let mut worker_ctx = worker::new(4, receiver, server.clone(),
         blockchain.clone(), mempool.clone(), peers.clone(), addr, pub_key, port);
@@ -65,7 +67,7 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supern
 
     let transaction_generator_ctx =
         transaction_generator::new(server.clone(),
-            mempool.clone(), blockchain.clone(), peers.clone(), account.clone());
+            mempool.clone(), blockchain.clone(), peers.clone(), account.clone(), using_dandelion);
 
     (server, miner_ctx, transaction_generator_ctx, blockchain, mempool, peers, account)
 }
@@ -257,6 +259,56 @@ pub fn generate_random_state(inputs: Vec<(H256, u32)>, outputs: Vec<(u64, H160)>
     state
 }
 
+///Dandelion
+pub fn get_k_random_peers(peer_list: &Vec<SocketAddr>, k: usize) -> Vec<SocketAddr> {
+    if peer_list.is_empty() {
+        return peer_list.to_owned()
+    }
+
+    let mut selected_peer_list: Vec<SocketAddr> = Vec::new();
+    let mut selected_idx: HashSet<u64> = HashSet::new();
+
+    while selected_peer_list.len() < k {
+        let rand_idx = gen_random_num(0, peer_list.len() as u64 - 1);
+        if !selected_idx.contains(&rand_idx) {
+            selected_idx.insert(rand_idx);
+            selected_peer_list.push(peer_list[rand_idx as usize]);
+        }
+    }
+    selected_peer_list
+}
+
+pub fn get_k_random_peers_from_idx(peer_list: &Vec<usize>, k: usize) -> Vec<usize> {
+    if peer_list.is_empty() {
+        return peer_list.to_owned()
+    }
+
+    let mut selected_peer_list: Vec<usize> = Vec::new();
+    let mut selected_idx: HashSet<u64> = HashSet::new();
+    let peer_num: u64 = peer_list.len() as u64;
+
+    while selected_peer_list.len() < k {
+        let rand_idx = gen_random_num(0, peer_num - 1);
+        if !selected_idx.contains(&rand_idx) {
+            selected_idx.insert(rand_idx);
+            selected_peer_list.push(rand_idx as usize);
+        }
+    }
+    selected_peer_list
+}
+
+// Select destination for inbound_addr (prevent cycle)
+pub fn select_destination(mut destinations: Vec<SocketAddr>, inbound_addr: SocketAddr) -> SocketAddr {
+    destinations.retain(|&x| x != inbound_addr);
+    let candidate_num = destinations.len() as u64;
+    if destinations.is_empty() {
+        //Todo: route back?
+        return inbound_addr;
+    }
+    let rand_idx = gen_random_num(0, candidate_num - 1);
+    destinations[rand_idx as usize]
+}
+
 ///Other
 
 // Generate 32-bytes array to set difficulty
@@ -318,7 +370,6 @@ pub fn load_network_structure() -> Option<HashMap<i32, Vec<i32>>> {
     }
 }
 
-#[allow(dead_code)]
 pub fn generate_random_str() -> String {
     let rng = thread_rng();
     rand::distributions::Alphanumeric.sample_iter(rng).take(10).collect()
@@ -332,6 +383,7 @@ pub mod tests {
     use crate::account::Account;
     use crate::crypto::key_pair;
     use crate::block::State;
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
     fn test_gen_valid_tran() {
@@ -370,5 +422,44 @@ pub mod tests {
         assert!(tran.transaction.outputs.len() == 1);
         assert!(tran.transaction.inputs[0] == TxInput::new(h256_1.clone(), 1));
         assert!(tran.transaction.outputs[0] == TxOutput::new(h160_2.clone(), 1));
+    }
+
+    #[test]
+    fn test_get_k_random_peers() {
+        let base_addr = 19601;
+        let mut peers: Vec<SocketAddr> = vec![];
+        peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr));
+        let mut selected_peers: Vec<SocketAddr> = get_k_random_peers(&peers, 1);
+        assert_eq!(selected_peers.len(), 1);
+        peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr + 1));
+        selected_peers = get_k_random_peers(&peers, 2);
+        assert_eq!(selected_peers.len(), 2);
+        assert_ne!(selected_peers[0], selected_peers[1]);
+        peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr + 2));
+        selected_peers = get_k_random_peers(&peers, 2);
+        assert_eq!(selected_peers.len(), 2);
+        assert_ne!(selected_peers[0], selected_peers[1]);
+    }
+
+    #[test]
+    fn test_select_destination() {
+        let base_addr = 19651;
+        let mut peers: Vec<SocketAddr> = vec![];
+        for i in 0..8 {
+            peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr + i));
+        }
+
+        let destinations = vec![peers[0], peers[1]];
+
+        for (idx, addr) in peers.iter().enumerate() {
+            let dest = select_destination(destinations.clone(), *addr);
+            if idx == 0 {
+                assert_eq!(dest, peers[1]);
+            } else if idx == 1 {
+                assert_eq!(dest, peers[0]);
+            } else {
+                assert!(dest == peers[0] || dest == peers[1]);
+            }
+        }
     }
 }

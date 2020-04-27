@@ -17,4 +17,5 @@ pub enum Message {
     Transactions(Vec<SignedTransaction>),
     NewPeers(Vec<(H160, Box<[u8; ED25519_PUBLIC_KEY_LEN]>, u16)>),
     Introduce((H160, Box<[u8; ED25519_PUBLIC_KEY_LEN]>, u16)),
+    NewDandelionTransactions(Vec<SignedTransaction>),
 }

@@ -42,6 +42,7 @@ use crate::peers::Peers;
 use crate::network::message::Message;
 use crate::crypto::key_pair;
 use ring::signature::KeyPair;
+use crate::spread::Spreader;
 
 fn run_regular_server(matches: ArgMatches) {
     // parse p2p server address
@@ -67,7 +68,17 @@ fn run_regular_server(matches: ArgMatches) {
     // create channels between server and worker
     let (msg_tx, msg_rx) = channel::unbounded();
 
-    let (spreader, spreader_ctx) = spread::get_spreader(config::SPREADER);
+    // create peer(for transaction)
+    let peers = Arc::new(Mutex::new(Peers::new()));
+    // create blockchain
+    let blockchain = Arc::new(Mutex::new(Blockchain::new()));
+    // create mempool
+    let mempool = Arc::new(Mutex::new(MemPool::new()));
+
+    let spreader_type = config::SPREADER;
+    let using_dandelion =  spreader_type == Spreader::Dandelion || spreader_type == Spreader::DandelionPlus;
+
+    let (spreader, spreader_ctx) = spread::get_spreader(spreader_type, mempool.clone());
     spreader_ctx.start();
     // start the p2p server
     let (server_ctx, server) = server::new(p2p_addr, msg_tx, spreader).unwrap();
@@ -91,15 +102,6 @@ fn run_regular_server(matches: ArgMatches) {
     let pub_key = account.get_pub_key();
     info!("Client get started: address is {:?}, {:?}", addr, &key_pair.public_key());
 
-    // create peer(for transaction)
-    let peers = Arc::new(Mutex::new(Peers::new()));
-
-    // create blockchain
-    let blockchain = Arc::new(Mutex::new(Blockchain::new()));
-
-    // create mempool
-    let mempool = Arc::new(Mutex::new(MemPool::new()));
-
     // start the transaction_generator
     let transaction_generator_ctx = transaction_generator::new(
         server.clone(),
@@ -107,6 +109,7 @@ fn run_regular_server(matches: ArgMatches) {
         blockchain.clone(),
         peers.clone(),
         account.clone(),
+        using_dandelion,
     );
     transaction_generator_ctx.start();
 
@@ -120,7 +123,7 @@ fn run_regular_server(matches: ArgMatches) {
         peers.clone(),
         account.addr,
         pub_key.clone(),
-        port
+        port,
     );
     worker_ctx.start();
 
@@ -208,7 +211,7 @@ fn run_supernode(matches: ArgMatches) {
         let account  = Arc::new(Account::new(addr.port(), key_pair.clone()));
         let pub_key = account.get_pub_key();
 
-        let (spreader, _) = spread::get_spreader(spread::Spreader::Default);
+        let (spreader, _) = spread::get_spreader(spread::Spreader::Default, mempool.clone());
         let (server_ctx, server) = server::new(addr.clone(), msg_tx, spreader).unwrap();
         server_ctx.start().unwrap();
 
@@ -221,7 +224,7 @@ fn run_supernode(matches: ArgMatches) {
             peers.clone(),
             account.addr,
             pub_key.clone(),
-            addr.port()
+            addr.port(),
         );
         worker_ctx.as_supernode();
         worker_ctx.start();
@@ -231,7 +234,7 @@ fn run_supernode(matches: ArgMatches) {
     }
 
     let (msg_tx, _) = channel::unbounded();
-    let (spreader, _) = spread::get_spreader(spread::Spreader::Default);
+    let (spreader, _) = spread::get_spreader(spread::Spreader::Default, mempool.clone());
     let (_, server) = server::new(nodes_addr[0], msg_tx, spreader).unwrap();  // Fake
     let key_pair = Arc::new(key_pair::random()); // Fake
 

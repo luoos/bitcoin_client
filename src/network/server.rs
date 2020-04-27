@@ -1,6 +1,7 @@
 use super::message;
 use super::peer::{self, ReadResult, WriteResult};
 use crate::spread;
+
 use crossbeam::channel as cbchannel;
 use log::{debug, error, info, trace, warn};
 use mio::{self, net};
@@ -28,7 +29,7 @@ pub fn new(
         control_chan: control_signal_receiver,
         new_msg_chan: msg_sink,
         _handle: handle.clone(),
-        spreader: spreader,
+        spreader,
     };
     Ok((ctx, handle))
 }
@@ -138,7 +139,7 @@ impl Context {
             ControlSignal::BroadcastMessage(msg) => {
                 trace!("Processing BroadcastMessage command");
                 match msg {
-                    message::Message::NewTransactionHashes(_) => {
+                    message::Message::NewTransactionHashes(_) | message::Message::NewDandelionTransactions(_) => {
                         // only set delay for this message
                         self.spreader.spread(&self.peers, &self.peer_list, msg);
                     }

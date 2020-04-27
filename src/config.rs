@@ -26,4 +26,19 @@ pub static REPEAT_TEST_TIME: usize = 20; // used for test repeatedly
 
 pub static SPREADER: Spreader = Spreader::Diffusion;
 
-pub static EPOCH_MS: i64 = 5000; // millisecond
+/*  Trickle Configuration */
+pub const TRICKLE_GAP_TIME: i64 = 200;
+
+/*  Diffusion Configuration */
+pub const DIFFUSION_BASE_GAP_TIME: i64 = 100;
+
+pub const DIFFUSION_RATE: f64 = 1.5;
+
+/*  Dandelion Configuration */
+pub static PHASE_SWITCH_PROB: u64 = 10; // probability(%) for a transaction to switch to diffusion
+
+pub static EPOCH_MS: i64 = 5000; // time(ms) for each epoch in dandelion/dandelion++
+
+pub static DANDELION_DEST_NUM: usize = 1; // number of destination peer of dandelion
+
+pub static DANDELION_PLUS_DEST_NUM: usize = 2; // number of destination peer of dandelion++

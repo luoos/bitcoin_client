@@ -37,7 +37,7 @@ pub fn new(
     peers_info: Arc<Mutex<Peers>>,
     self_addr: H160,
     self_pub_key: Box<[u8; ED25519_PUBLIC_KEY_LEN]>,
-    self_port: u16
+    self_port: u16,
 ) -> Context {
     Context {
         msg_chan: msg_src,
@@ -142,6 +142,19 @@ impl Context {
                     drop(mempool);
                     if to_get.len() > 0 {
                         peer.write(Message::GetTransactions(to_get));
+                    }
+                }
+                Message::NewDandelionTransactions(trans) => {
+                    //Honest node broadcast without putting into mempool; adversary put into mempool & swallow the msg
+                    debug!("NewDandelionTxHashes message received: {:?}", trans);
+                    let mut mempool = self.mempool.lock().unwrap();
+                    if self.supernode {
+                        for t in trans.iter() {
+                            mempool.insert_ts_and_addr(t.hash(), peer.addr.clone());
+                            mempool.add_with_check(t);
+                        }
+                    } else {
+                        self.server.broadcast(Message::NewDandelionTransactions(trans));
                     }
                 }
                 Message::GetTransactions(hashes) => {
