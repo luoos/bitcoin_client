@@ -65,7 +65,7 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supern
     let (miner_ctx, _miner) = miner::new(server.clone(),
         blockchain.clone(), mempool.clone(), key_pair.clone());
 
-    let transaction_generator_ctx =
+    let (transaction_generator_ctx, _transaction_generator_ctx) =
         transaction_generator::new(server.clone(),
             mempool.clone(), blockchain.clone(), peers.clone(), account.clone(), using_dandelion);
 

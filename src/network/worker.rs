@@ -147,9 +147,9 @@ impl Context {
                 Message::NewDandelionTransactions(trans) => {
                     //Honest node broadcast without putting into mempool; adversary put into mempool & swallow the msg
                     debug!("NewDandelionTxHashes message received: {:?}", trans);
-                    let mut mempool = self.mempool.lock().unwrap();
                     if self.supernode {
                         for t in trans.iter() {
+                            let mut mempool = self.mempool.lock().unwrap();
                             mempool.insert_ts_and_addr(t.hash(), peer.addr.clone());
                             mempool.add_with_check(t);
                         }

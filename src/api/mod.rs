@@ -3,6 +3,10 @@ use crate::miner::Handle as MinerHandle;
 use crate::blockchain::Blockchain;
 use crate::block::{PrintableBlock, PrintableContent, PrintableState};
 use crate::mempool::MemPool;
+use crate::transaction::{PrintableTransaction, SignedTransaction};
+use crate::transaction_generator::Handle as TxGeneratorHandle;
+use crate::peers::Peers;
+use crate::network::estimator::{start_first_timestamp_estimate, check_right_count};
 
 use log::info;
 use std::collections::HashMap;
@@ -13,13 +17,12 @@ use tiny_http::Server as HTTPServer;
 use url::Url;
 use tera::{Tera, Context};
 use std::sync::{Arc, Mutex};
-use crate::transaction::{PrintableTransaction, SignedTransaction};
-use crate::peers::Peers;
-use crate::network::estimator::{start_first_timestamp_estimate, check_right_count};
+
 
 pub struct Server {
     handle: HTTPServer,
     miner: MinerHandle,
+    transaction_generator: TxGeneratorHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     mempool: Arc<Mutex<MemPool>>,
     peers : Arc<Mutex<Peers>>,
@@ -63,6 +66,7 @@ impl Server {
     pub fn start(
         addr: std::net::SocketAddr,
         miner: MinerHandle,
+        transaction_generator: TxGeneratorHandle,
         blockchain: Arc<Mutex<Blockchain>>,
         mempool: Arc<Mutex<MemPool>>,
         peers : Arc<Mutex<Peers>>,
@@ -71,6 +75,7 @@ impl Server {
         let server = Self {
             handle,
             miner,
+            transaction_generator,
             blockchain,
             mempool,
             peers,
@@ -78,6 +83,7 @@ impl Server {
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
                 let miner = server.miner.clone();
+                let transaction_generator = server.transaction_generator.clone();
                 let blockchain = Arc::clone(&server.blockchain);
                 let mempool = Arc::clone(&server.mempool);
                 let peers = server.peers.clone();
@@ -173,6 +179,14 @@ impl Server {
                             let resp = Response::from_string(html)
                                 .with_header(content_type);
                             req.respond(resp).unwrap();
+                        }
+                        "/txgenerator/stop" => {
+                            transaction_generator.stop();
+                            respond_json!(req, true, "ok");
+                        }
+                        "/txgenerator/pause" => {
+                            transaction_generator.pause();
+                            respond_json!(req, true, "ok");
                         }
                         "/estimator/ft" => {
                             let mem = mempool.lock().unwrap();

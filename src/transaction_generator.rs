@@ -3,6 +3,7 @@ use std::thread;
 use std::time;
 use log::info;
 use rand::Rng;
+use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
 
 use crate::network::server::Handle as ServerHandle;
 use crate::network::message::Message;
@@ -14,13 +15,33 @@ use crate::peers::Peers;
 use crate::blockchain::Blockchain;
 use crate::account::Account;
 
+enum ControlSignal {
+    Start(u64), // the number controls the interval to generate new tx
+    Exit,
+    Paused,
+}
+
+enum OperatingState {
+    Run(u64),
+    Paused,
+    ShutDown,
+}
+
 pub struct Context {
+    control_chan: Receiver<ControlSignal>,
+    operating_state: OperatingState,
     server: ServerHandle,
     mempool: Arc<Mutex<MemPool>>,
     blockchain: Arc<Mutex<Blockchain>>,
     peers: Arc<Mutex<Peers>>,
     account: Arc<Account>,
     dandelion: bool,
+}
+
+#[derive(Clone)]
+pub struct Handle {
+    /// Channel for sending signal to the tx_generating thread
+    control_chan: Sender<ControlSignal>,
 }
 
 pub fn new(
@@ -30,14 +51,48 @@ pub fn new(
     peers: Arc<Mutex<Peers>>,
     account: Arc<Account>,
     dandelion: bool,
-) -> Context {
-    Context {
+) -> (Context, Handle) {
+    let (signal_chan_sender, signal_chan_receiver) = unbounded();
+
+    let ctx = Context {
+        control_chan: signal_chan_receiver,
+        operating_state: OperatingState::Run(TRANSACTION_GENERATE_INTERVAL),
         server,
         mempool,
         blockchain,
         peers,
         account,
         dandelion,
+    };
+
+    let handle = Handle {
+        control_chan: signal_chan_sender,
+    };
+
+    (ctx, handle)
+}
+
+impl Handle {
+    pub fn exit(&self) {
+        self.control_chan.send(ControlSignal::Exit).unwrap();
+    }
+
+    pub fn start(&self, itv: u64) {
+        self.control_chan
+            .send(ControlSignal::Start(itv))
+            .unwrap();
+    }
+
+    pub fn stop(&self) {
+        self.control_chan
+            .send(ControlSignal::Exit)
+            .unwrap()
+    }
+
+    pub fn pause(&self) {
+        self.control_chan
+            .send(ControlSignal::Paused)
+            .unwrap()
     }
 }
 
@@ -52,28 +107,77 @@ impl Context {
         info!("Transaction generator Started");
     }
 
-    pub fn transaction_generator_loop(&mut self) {
+    fn handle_control_signal(&mut self, signal: ControlSignal) {
+        match signal {
+            ControlSignal::Start(i) => {
+                info!("Transaction_generator starting in continuous mode");
+                self.operating_state = OperatingState::Run(i);
+            }
+            ControlSignal::Exit => {
+                info!("Transaction_generator shutting down");
+                self.operating_state = OperatingState::ShutDown;
+            }
+            ControlSignal::Paused => {
+                info!("Transaction_generator paused");
+                self.operating_state = OperatingState::Paused;
+            }
+        }
+    }
+
+    fn transaction_generator_loop(&mut self) {
         loop {
-            // Update state from tip of longest-chain
-            let state = self.blockchain.lock().unwrap().tip_block_state();
-            if let Some(rec_addr) = self.random_peer_addr() {
-                if let Some(tran) = helper::generate_valid_tran(&state, &self.account, &rec_addr) {
-                    let mut mempool = self.mempool.lock().unwrap();
-                    if mempool.add_with_check(&tran) {
-                        info!("Put a new transaction into client! Now mempool has {} transaction", mempool.size());
-                        if self.dandelion {
-                            let vec_trans = vec![tran];
-                            self.server.broadcast(Message::NewDandelionTransactions(vec_trans));
-                        } else {
-                            let vec_hash = vec![tran.hash.clone()];
-                            self.server.broadcast(Message::NewTransactionHashes(vec_hash));
-                        }
+            match self.operating_state {
+                OperatingState::Paused => {
+                    let signal = self.control_chan.recv().unwrap();
+                    self.handle_control_signal(signal);
+                    continue;
+                }
+                OperatingState::ShutDown => {
+                    return;
+                }
+                _ => match self.control_chan.try_recv() {
+                    Ok(signal) => {
+                        self.handle_control_signal(signal);
+                    }
+                    Err(TryRecvError::Empty) => {}
+                    Err(TryRecvError::Disconnected) => panic!("Transaction_generator control channel detached"),
+                },
+            }
+            if let OperatingState::ShutDown = self.operating_state {
+                return;
+            }
+
+            self.tx_generating();
+
+            if let OperatingState::Run(i) = self.operating_state {
+                if i != 0 {
+                    let sleep_itv = time::Duration::from_millis(i as u64);
+                    thread::sleep(sleep_itv);
+                }
+            }
+        }
+    }
+
+    // Generating logic method!
+    fn tx_generating(&mut self) {
+        // Update state from tip of longest-chain
+        let state = self.blockchain.lock().unwrap().tip_block_state();
+        if let Some(rec_addr) = self.random_peer_addr() {
+            if let Some(tran) = helper::generate_valid_tran(&state, &self.account, &rec_addr) {
+                let mut mempool = self.mempool.lock().unwrap();
+                if mempool.add_with_check(&tran) {
+                    info!("Put a new transaction into client! Now mempool has {} transaction", mempool.size());
+                    if self.dandelion {
+                        let vec_trans = vec![tran];
+                        self.server.broadcast(Message::NewDandelionTransactions(vec_trans));
+                    } else {
+                        let vec_hash = vec![tran.hash.clone()];
+                        self.server.broadcast(Message::NewTransactionHashes(vec_hash));
                     }
                 }
             }
-            let sleep_itv = time::Duration::from_millis(TRANSACTION_GENERATE_INTERVAL);
-            thread::sleep(sleep_itv);
         }
+
     }
 
     // Pick single random peer to as receiver of new transaction

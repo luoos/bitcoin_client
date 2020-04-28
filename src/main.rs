@@ -103,7 +103,7 @@ fn run_regular_server(matches: ArgMatches) {
     info!("Client get started: address is {:?}, {:?}", addr, &key_pair.public_key());
 
     // start the transaction_generator
-    let transaction_generator_ctx = transaction_generator::new(
+    let (transaction_generator_ctx, transaction_generator) = transaction_generator::new(
         server.clone(),
         mempool.clone(),
         blockchain.clone(),
@@ -150,6 +150,7 @@ fn run_regular_server(matches: ArgMatches) {
     ApiServer::start(
         api_addr,
         miner.clone(),
+        transaction_generator.clone(),
         blockchain.clone(),
         mempool.clone(),
         peers.clone(),
@@ -186,6 +187,15 @@ fn run_supernode(matches: ArgMatches) {
         .parse::<SocketAddr>()
         .unwrap_or_else(|e| {
             error!("Error parsing API server address: {}", e);
+            process::exit(1);
+        });
+
+    let p2p_addr = matches
+        .value_of("peer_addr")
+        .unwrap()
+        .parse::<SocketAddr>()
+        .unwrap_or_else(|e| {
+            error!("Error parsing P2P server address: {}", e);
             process::exit(1);
         });
 
@@ -236,7 +246,19 @@ fn run_supernode(matches: ArgMatches) {
     let (msg_tx, _) = channel::unbounded();
     let (spreader, _) = spread::get_spreader(spread::Spreader::Default, mempool.clone());
     let (_, server) = server::new(nodes_addr[0], msg_tx, spreader).unwrap();  // Fake
+
+    let port = p2p_addr.port();
     let key_pair = Arc::new(key_pair::random()); // Fake
+    let account  = Arc::new(Account::new(port, key_pair.clone())); // Fake
+
+    let (_, transaction_generator) = transaction_generator::new(
+        server.clone(),
+        mempool.clone(),
+        blockchain.clone(),
+        peers.clone(),
+        account.clone(),
+        false,
+    );
 
     let (_, miner) = miner::new(  // Fake
         server.clone(),
@@ -248,6 +270,7 @@ fn run_supernode(matches: ArgMatches) {
     ApiServer::start(
         api_addr,
         miner.clone(),  // Fake
+        transaction_generator.clone(),  //Fake
         blockchain.clone(),  // Fake
         mempool.clone(),
         peers.clone(),
