@@ -189,8 +189,6 @@ impl DandelionSpreader {
 
 impl Spreading for DandelionSpreader {
     fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
-        let mut map = self.guard_map.lock().unwrap();
-
         match msg.to_owned() {
             Message::NewTransactionHashes(_) => {
                 diffusion(&self.timer, &self.guard_map, peers, peer_list, msg);
@@ -225,7 +223,7 @@ impl Spreading for DandelionSpreader {
                         let now_nano = helper::get_current_time_in_nano();
                         let guard = self.timer.schedule_with_delay(chrono::Duration::microseconds(self.epoch_period_ms),
                                                                    TimerTask::DandelionResetEpoch(now_nano, self.target_index.clone()));
-                        map.insert(now_nano, guard);
+                        self.guard_map.lock().unwrap().insert(now_nano, guard);
                     }
                 }
             }
