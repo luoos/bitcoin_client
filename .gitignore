@@ -1,3 +1,14 @@
 target
 .DS_Store
 .idea
+
+# Scripts
+network.jpg
+network.txt
+run_mining.sh
+run_server.sh
+run_supernode.sh
+start_mining.sh
+kill_server.sh
+kill_supernode.sh
+stop_tx_generator.sh
