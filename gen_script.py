@@ -44,6 +44,13 @@ def generate_kill_server_script(G):
         script.append(f'kill $(lsof -t -i:{n+BASE_API_PORT})\n')
     return ''.join(script)
 
+def generate_stop_tx_script(G):
+    script = []
+    for n in G.nodes():
+        script.append(f'curl http://127.0.0.1:{n+BASE_API_PORT}/txgenerator/pause\n')
+        script.append('sleep .2\n')
+    return ''.join(script)
+
 def generate_network_description(G):
     content = []
     for n in G.nodes():
@@ -112,4 +119,10 @@ if __name__ == '__main__':
     kill_supernode_script = generate_kill_supernode_script(SUPERNODE_API_PORT)
     with open(filename, 'w') as f:
         f.write(kill_supernode_script)
+    add_exec_perm(filename)
+
+    filename = 'stop_tx_generator.sh'
+    stop_tx_gen = generate_stop_tx_script(G)
+    with open(filename, 'w') as f:
+        f.write(stop_tx_gen)
     add_exec_perm(filename)
