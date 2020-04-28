@@ -202,10 +202,13 @@ impl Spreading for DandelionSpreader {
                     // The first one switching to diffusion should add all valid transactions into mempool
                     let mut mempool = self.mempool.lock().unwrap();
                     for t in trans.iter() {
-                        if mempool.add_with_check(t) {
+                        if mempool.exist(&t.hash()) { // source
+                            new_hashes.push(t.hash());
+                        } else if mempool.add_with_check(t) {
                             new_hashes.push(t.hash());
                         }
                     }
+                    drop(mempool);
                     // Relay NewTransactionHashes
                     let new_msg = Message::NewTransactionHashes(new_hashes);
                     diffusion(&self.timer, &self.guard_map, peers, peer_list, new_msg);
