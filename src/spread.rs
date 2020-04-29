@@ -137,7 +137,7 @@ fn diffusion(timer: &MessageTimer<TimerTask>, guard_map: &Arc<Mutex<HashMap<i64,
         let now_nano = helper::get_current_time_in_nano();
         let guard = timer.schedule_with_delay(chrono::Duration::milliseconds(gap_time),
                                                    TimerTask::PeerWrite(now_nano, peers[*peer_id].handle.clone(), msg.clone()));
-        gap_time = (gap_time as f64 * DIFFUSION_RATE) as i64;
+        gap_time += (gap_time as f64 * DIFFUSION_RATE) as i64;
         map.insert(now_nano, guard);
     }
 }
@@ -371,7 +371,7 @@ mod tests {
 
         // after one and a half time, both of 2, 3 will receive the transaction
 
-        sleep(time::Duration::from_millis((DIFFUSION_BASE_GAP_TIME as f64 * DIFFUSION_RATE) as u64 + 50u64));
+        sleep(time::Duration::from_millis((DIFFUSION_BASE_GAP_TIME as f64 * (1 as f64 + DIFFUSION_RATE)) as u64 + 50u64));
 
         let pool_1 = mempool_1.lock().unwrap();
         let pool_2 = mempool_2.lock().unwrap();
