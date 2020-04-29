@@ -130,14 +130,16 @@ impl Spreading for TrickleSpreader {
 
 // Diffusion spreading method
 fn diffusion(timer: &MessageTimer<TimerTask>, guard_map: &Arc<Mutex<HashMap<i64, Guard>>>, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
-    let mut gap_time = DIFFUSION_BASE_GAP_TIME;
+    let mut gap_time = DIFFUSION_BASE_GAP_TIME as f64;
+    let mut send_time = gap_time as i64;
     let shuffled_peers_list = helper::gen_shuffled_peer_list(peer_list);
     let mut map = guard_map.lock().unwrap();
     for peer_id in shuffled_peers_list.iter() {
         let now_nano = helper::get_current_time_in_nano();
-        let guard = timer.schedule_with_delay(chrono::Duration::milliseconds(gap_time),
+        let guard = timer.schedule_with_delay(chrono::Duration::milliseconds(send_time),
                                                    TimerTask::PeerWrite(now_nano, peers[*peer_id].handle.clone(), msg.clone()));
-        gap_time += (gap_time as f64 * DIFFUSION_RATE) as i64;
+        gap_time *= DIFFUSION_RATE;
+        send_time += gap_time as i64;
         map.insert(now_nano, guard);
     }
 }
@@ -294,6 +296,13 @@ mod tests {
     use crate::network::peer;
     use crate::network::message::Message;
 
+    fn check_mempools_total_size(mempool_list: &Vec<Arc<Mutex<MemPool>>>, expect_size: usize) {
+        let mut cur = 0;
+        for m in mempool_list.iter() {
+            cur += m.lock().unwrap().size();
+        }
+        assert_eq!(expect_size, cur);
+    }
 
     #[test]
     fn test_trickle_transaction_relay() {
@@ -344,43 +353,29 @@ mod tests {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19031);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19032);
         let p2p_addr_3 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19033);
+        let p2p_addr_4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19034);
+        let p2p_addr_5 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19035);
 
-        let (_server_1, _miner_ctx_1, mut generator_1, _blockchain_1, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Diffusion, false);
-        let (server_2, _miner_ctx_2, generator_2, _blockchain_2, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Diffusion, false);
-        let (server_3, _miner_ctx_3, generator_3, _blockchain_3, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Diffusion, false);
+        let (server_1, _, mut generator_1, _, mempool_1, _, _) = new_server_env(p2p_addr_1, Spreader::Diffusion, false);
+        let (server_2, _, generator_2, _, mempool_2, _, _) = new_server_env(p2p_addr_2, Spreader::Diffusion, false);
+        let (server_3, _, generator_3, _, mempool_3, _, _) = new_server_env(p2p_addr_3, Spreader::Diffusion, false);
+        let (server_4, _, _, _, mempool_4, _, _) = new_server_env(p2p_addr_4, Spreader::Diffusion, false);
+        let (_, _, _, _, mempool_5, _, _) = new_server_env(p2p_addr_5, Spreader::Diffusion, false);
 
-        let peers_1 = vec![p2p_addr_1];
-        connect_peers(&server_2, &peers_1);
-        let peers_2 = vec![p2p_addr_2];
-        connect_peers(&server_3, &peers_2);
+        // all other servers directly connect to server 1
+        let peers_list = vec![p2p_addr_2, p2p_addr_3, p2p_addr_4, p2p_addr_5];
+        connect_peers(&server_1, &peers_list);
+
+        let mempool_list = vec![mempool_2.clone(), mempool_3.clone(),
+                                mempool_4.clone(), mempool_5.clone()];
 
         generator_1.generating();
-        sleep(time::Duration::from_millis((DIFFUSION_BASE_GAP_TIME) as u64 + 50u64));
-
-        let pool_1 = mempool_1.lock().unwrap();
-        let pool_2 = mempool_2.lock().unwrap();
-        let pool_3 = mempool_3.lock().unwrap();
-        // after half time, only one of 2, 3 will receive the transaction
-
-        assert_eq!(pool_1.size(), 1);
-        assert_ne!(pool_2.size(), pool_3.size());
-        assert_eq!(pool_2.size() + pool_3.size(), 1);
-        drop(pool_1);
-        drop(pool_2);
-        drop(pool_3);
-
-        // after one and a half time, both of 2, 3 will receive the transaction
-
-        sleep(time::Duration::from_millis((DIFFUSION_BASE_GAP_TIME as f64 * (1 as f64 + DIFFUSION_RATE)) as u64 + 50u64));
-
-        let pool_1 = mempool_1.lock().unwrap();
-        let pool_2 = mempool_2.lock().unwrap();
-        let pool_3 = mempool_3.lock().unwrap();
-        // after half time, only one of 2, 3 will receive the transaction
-
-        assert_eq!(pool_1.size(), 1);
-        assert_eq!(pool_1.size(), pool_2.size());
-        assert_eq!(pool_2.size(), pool_3.size());
+        let mut sleep_time = DIFFUSION_BASE_GAP_TIME as f64;
+        for i in 1..5 {
+            sleep_time *= DIFFUSION_RATE;
+            sleep(time::Duration::from_millis(sleep_time as u64));
+            check_mempools_total_size(&mempool_list, i);
+        }
     }
 
     #[test]
