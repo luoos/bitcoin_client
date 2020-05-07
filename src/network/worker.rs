@@ -73,6 +73,7 @@ impl Context {
         loop {
             let msg = self.msg_chan.recv().unwrap();
             let (msg, peer) = msg;
+            let peer_key = peer.key;
             let msg: Message = bincode::deserialize(&msg).unwrap();
             match msg {
                 Message::Ping(nonce) => {
@@ -125,7 +126,7 @@ impl Context {
                         peer.write(Message::GetBlocks(missing_parents));
                     }
                     if new_hashes.len() > 0 {
-                        self.server.broadcast(Message::NewBlockHashes(new_hashes));
+                        self.server.broadcast(Message::NewBlockHashes(new_hashes), Some(peer_key));
                     }
                 }
                 Message::NewTransactionHashes(hashes) => {
@@ -154,7 +155,7 @@ impl Context {
                             mempool.add_with_check(t);
                         }
                     } else {
-                        self.server.broadcast(Message::NewDandelionTransactions(trans));
+                        self.server.broadcast(Message::NewDandelionTransactions(trans), Some(peer_key));
                     }
                 }
                 Message::GetTransactions(hashes) => {
@@ -177,7 +178,7 @@ impl Context {
                     }
                     drop(mempool);
                     if new_hashes.len() > 0  && !self.supernode {
-                        self.server.broadcast(Message::NewTransactionHashes(new_hashes));
+                        self.server.broadcast(Message::NewTransactionHashes(new_hashes), Some(peer_key));
                     }
                 }
                 Message::NewPeers(content) => {
@@ -195,7 +196,7 @@ impl Context {
                         }
                     }
                     if new_peers.len() > 0 {
-                        self.server.broadcast(Message::NewPeers(new_peers));
+                        self.server.broadcast(Message::NewPeers(new_peers), Some(peer_key));
                     }
                 }
                 Message::Introduce(content) => {
@@ -217,7 +218,7 @@ impl Context {
                         all_peers_info.push((self.self_addr, self.self_pub_key.clone(), self.self_port));
                         peer.write(Message::NewPeers(all_peers_info));
 
-                        self.server.broadcast(Message::NewPeers(vec![content]));
+                        self.server.broadcast(Message::NewPeers(vec![content]), Some(peer_key));
                     }
 
                     peer.write(Message::NewBlockHashes(blockchain.hash_chain()));

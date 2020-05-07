@@ -169,10 +169,10 @@ impl Context {
                     info!("Put a new transaction into client! Now mempool has {} transaction", mempool.size());
                     if self.dandelion {
                         let vec_trans = vec![tran];
-                        self.server.broadcast(Message::NewDandelionTransactions(vec_trans));
+                        self.server.broadcast(Message::NewDandelionTransactions(vec_trans), None);
                     } else {
                         let vec_hash = vec![tran.hash.clone()];
-                        self.server.broadcast(Message::NewTransactionHashes(vec_hash));
+                        self.server.broadcast(Message::NewTransactionHashes(vec_hash), None);
                     }
                 }
             }
@@ -210,10 +210,10 @@ impl Context {
         if mempool.add_with_check(&new_t) {
             if self.dandelion {
                 let vec_trans = vec![new_t];
-                self.server.broadcast(Message::NewDandelionTransactions(vec_trans));
+                self.server.broadcast(Message::NewDandelionTransactions(vec_trans), None);
             } else {
                 let vec_hash = vec![new_t.hash.clone()];
-                self.server.broadcast(Message::NewTransactionHashes(vec_hash));
+                self.server.broadcast(Message::NewTransactionHashes(vec_hash), None);
             }
         }
         drop(mempool);

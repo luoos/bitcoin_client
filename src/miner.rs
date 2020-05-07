@@ -180,7 +180,7 @@ impl Context {
 
         // broadcast new block
         let vec = vec![block.hash.clone()];
-        self.server.broadcast(Message::NewBlockHashes(vec));
+        self.server.broadcast(Message::NewBlockHashes(vec), None);
     }
 
     // Mining process! Return true: mining a block successfully

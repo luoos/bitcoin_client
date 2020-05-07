@@ -158,6 +158,7 @@ impl WriteContext {
 pub fn new(
     stream: mio::net::TcpStream,
     direction: Direction,
+    key: usize,
 ) -> std::io::Result<(Context, Handle)> {
     let reader_stream = stream.try_clone()?;
     let writer_stream = stream.try_clone()?;
@@ -184,6 +185,7 @@ pub fn new(
     let handle = Handle {
         write_queue: write_sender,
         addr,
+        key,
     };
     let ctx = Context {
         addr,
@@ -215,6 +217,7 @@ pub struct Context {
 pub struct Handle {
     pub addr: std::net::SocketAddr,
     write_queue: channel::Sender<Vec<u8>>,
+    pub key: usize,
 }
 
 impl Handle {

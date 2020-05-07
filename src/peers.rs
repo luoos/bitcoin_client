@@ -83,7 +83,7 @@ mod test {
 
 
         // server_1 online but no connections
-        server_1.broadcast(Message::Introduce((addr_1, pub_key_1.clone(), port_1)));
+        server_1.broadcast(Message::Introduce((addr_1, pub_key_1.clone(), port_1)), None);
         thread::sleep(time::Duration::from_millis(100));
 
         let mut p_1 = peers_1.lock().unwrap();
@@ -102,7 +102,7 @@ mod test {
         connect_peers(&server_2, &server_peers_1);
         thread::sleep(time::Duration::from_millis(100));
 
-        server_2.broadcast(Message::Introduce((addr_2, pub_key_2.clone(), port_2)));
+        server_2.broadcast(Message::Introduce((addr_2, pub_key_2.clone(), port_2)), None);
         thread::sleep(time::Duration::from_millis(100));
 
         p_1 = peers_1.lock().unwrap();
@@ -118,7 +118,7 @@ mod test {
         connect_peers(&server_3, &server_peers_2);
         thread::sleep(time::Duration::from_millis(100));
 
-        server_3.broadcast(Message::Introduce((addr_3, pub_key_3, port_3)));
+        server_3.broadcast(Message::Introduce((addr_3, pub_key_3, port_3)), None);
         thread::sleep(time::Duration::from_millis(100));
 
         p_1 = peers_1.lock().unwrap();
@@ -136,7 +136,7 @@ mod test {
         connect_peers(&server_4, &server_peers_12);
         thread::sleep(time::Duration::from_millis(100));
 
-        server_4.broadcast(Message::Introduce((addr_4, pub_key_4, port_4)));
+        server_4.broadcast(Message::Introduce((addr_4, pub_key_4, port_4)), None);
         thread::sleep(time::Duration::from_millis(100));
 
         p_1 = peers_1.lock().unwrap();

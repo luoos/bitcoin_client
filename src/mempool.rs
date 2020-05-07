@@ -253,7 +253,7 @@ mod tests {
         drop(chain_3);
 
         // Server3 Only broadcasts a new block
-        server_3.broadcast(Message::NewBlockHashes(vec![new_block.hash()]));
+        server_3.broadcast(Message::NewBlockHashes(vec![new_block.hash()]), None);
         sleep(time::Duration::from_millis(100));
         // Check server1&2 remove all the transactions within this new block
         pool_1 = mempool_1.lock().unwrap();
@@ -332,10 +332,10 @@ mod tests {
         connect_peers(&server_3, &peers_2);
 
         let hash = generate_random_hash();
-        server_1.broadcast(Message::NewTransactionHashes(vec![hash]));
+        server_1.broadcast(Message::NewTransactionHashes(vec![hash]), None);
         sleep(time::Duration::from_millis(100));
         assert_eq!(1, mempool_2.lock().unwrap().ts_addr_map.len());
-        server_3.broadcast(Message::NewTransactionHashes(vec![hash]));
+        server_3.broadcast(Message::NewTransactionHashes(vec![hash]), None);
         sleep(time::Duration::from_millis(100));
         assert_eq!(2, mempool_2.lock().unwrap().ts_addr_map.get(&hash).unwrap().len());
     }

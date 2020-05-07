@@ -15,7 +15,7 @@ use crate::mempool::MemPool;
 use crate::crypto::hash::{H256, Hashable};
 
 pub trait Spreading {
-    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_index: &Vec<usize>, msg: Message);
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_index: &Vec<usize>, msg: Message, src_peer_key: Option<usize>);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -85,7 +85,7 @@ struct DefaultSpreader {
 }
 
 impl Spreading for DefaultSpreader {
-    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message, src_peer_key: Option<usize>) {
         let mut map = self.guard_map.lock().unwrap();
         for peer_id in peer_list {
             let now_nano = helper::get_current_time_in_nano();
@@ -116,7 +116,7 @@ impl TrickleSpreader {
 }
 
 impl Spreading for TrickleSpreader {
-    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message, src_peer_key: Option<usize>) {
         let shuffled_peers_list = helper::gen_shuffled_peer_list(peer_list);
         let mut map = self.guard_map.lock().unwrap();
         for (i, peer_id) in shuffled_peers_list.iter().enumerate() {
@@ -157,7 +157,7 @@ impl DiffusionSpreader {
 }
 
 impl Spreading for DiffusionSpreader {
-    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message, src_peer_key: Option<usize>) {
         diffusion(&self.timer, &self.guard_map, peers, peer_list, msg);
     }
 }
@@ -190,7 +190,7 @@ impl DandelionSpreader {
 }
 
 impl Spreading for DandelionSpreader {
-    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message, src_peer_key: Option<usize>) {
         match msg.to_owned() {
             Message::NewTransactionHashes(_) => {
                 diffusion(&self.timer, &self.guard_map, peers, peer_list, msg);
@@ -253,7 +253,7 @@ impl DandelionPlusSpreader {
 }
 
 impl Spreading for DandelionPlusSpreader {
-    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message) {
+    fn spread(&mut self, peers: &slab::Slab<peer::Context>, peer_list: &Vec<usize>, msg: Message, src_peer_key: Option<usize>) {
         // TODO
     }
 }
@@ -386,11 +386,11 @@ mod tests {
 
         let stream = std::net::TcpStream::connect(p2p_addr_1).unwrap();
         let mio_stream = mio::net::TcpStream::from_stream(stream).unwrap();
-        let (peer_ctx, handle) = peer::new(mio_stream, peer::Direction::Outgoing).unwrap();
         let mut peers = slab::Slab::<peer::Context>::new();
         let vacant = peers.vacant_entry();
         let key: usize = vacant.key();
         let mut peer_list = Vec::<usize>::new();
+        let (peer_ctx, handle) = peer::new(mio_stream, peer::Direction::Outgoing, key).unwrap();
         vacant.insert(peer_ctx);
         peer_list.push(key);
         let trans = vec![helper::generate_random_signed_transaction()];
@@ -398,7 +398,7 @@ mod tests {
         let (mut dandelion_sreapder, ctx) = DandelionSpreader::new(mempool);
         ctx.start();
         dandelion_sreapder.set_epoch_period(10);
-        dandelion_sreapder.spread(&peers, &peer_list, msg.clone());
+        dandelion_sreapder.spread(&peers, &peer_list, msg.clone(), Some(key));
         assert_eq!(key, *dandelion_sreapder.target_index.lock().unwrap());
         thread::sleep(time::Duration::from_millis(15));
         assert_eq!(usize::max_value(), *dandelion_sreapder.target_index.lock().unwrap());

@@ -84,7 +84,7 @@ impl Context {
             mio::Ready::readable(),
             mio::PollOpt::edge(),
         )?;
-        let (ctx, handle) = peer::new(stream, direction)?;
+        let (ctx, handle) = peer::new(stream, direction, key)?;
 
         // register the writer queue
         self.poll.register(
@@ -136,12 +136,12 @@ impl Context {
                 let handle = self.connect(&req.addr);
                 req.result_chan.send(handle).unwrap();
             }
-            ControlSignal::BroadcastMessage(msg) => {
+            ControlSignal::BroadcastMessage(msg, src_peer_key) => {
                 trace!("Processing BroadcastMessage command");
                 match msg {
                     message::Message::NewTransactionHashes(_) | message::Message::NewDandelionTransactions(_) => {
                         // only set delay for this message
-                        self.spreader.spread(&self.peers, &self.peer_list, msg);
+                        self.spreader.spread(&self.peers, &self.peer_list, msg, src_peer_key);
                     }
                     _ => {
                         for peer_id in &self.peer_list {
@@ -396,16 +396,16 @@ impl Handle {
         receiver.recv().unwrap()
     }
 
-    pub fn broadcast(&self, msg: message::Message) {
+    pub fn broadcast(&self, msg: message::Message, src_peer_key: Option<usize>) {
         self.control_chan
-            .send(ControlSignal::BroadcastMessage(msg))
+            .send(ControlSignal::BroadcastMessage(msg, src_peer_key))
             .unwrap();
     }
 }
 
 enum ControlSignal {
     ConnectNewPeer(ConnectRequest),
-    BroadcastMessage(message::Message),
+    BroadcastMessage(message::Message, Option<usize>),
 }
 
 struct ConnectRequest {

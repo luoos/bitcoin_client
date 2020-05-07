@@ -535,7 +535,7 @@ mod tests {
         let pub_key1 = account_1.get_pub_key();
         let pub_key2 = account_1.get_pub_key();
 
-        server_1.broadcast(Message::Introduce((addr_1, pub_key1, port_1)));
+        server_1.broadcast(Message::Introduce((addr_1, pub_key1, port_1)), None);
         thread::sleep(time::Duration::from_millis(100));
         blockchain_1.lock().unwrap().set_check_trans(false);
         blockchain_2.lock().unwrap().set_check_trans(false);
@@ -557,7 +557,7 @@ mod tests {
         connect_peers(&server_2, &server_peers_1);
         thread::sleep(time::Duration::from_millis(100));
 
-        server_2.broadcast(Message::Introduce((addr_2, pub_key2, port_2)));
+        server_2.broadcast(Message::Introduce((addr_2, pub_key2, port_2)), None);
         thread::sleep(time::Duration::from_millis(100));
 
         // Check if blockchain is sync

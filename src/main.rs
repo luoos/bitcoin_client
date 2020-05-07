@@ -144,7 +144,7 @@ fn run_regular_server(matches: ArgMatches) {
 
     thread::sleep(time::Duration::from_millis(200));
     // introduce myself to network_peers
-    server.broadcast(Message::Introduce((addr, pub_key, port)));
+    server.broadcast(Message::Introduce((addr, pub_key, port)), None);
 
     // start the API server
     ApiServer::start(
@@ -240,7 +240,7 @@ fn run_supernode(matches: ArgMatches) {
         worker_ctx.start();
 
         helper::connect_peers(&server, &known_peers);
-        server.broadcast(Message::Introduce((account.addr, pub_key, addr.port())));
+        server.broadcast(Message::Introduce((account.addr, pub_key, addr.port())), None);
     }
 
     let (msg_tx, _) = channel::unbounded();
