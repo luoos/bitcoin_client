@@ -14,6 +14,7 @@ pub struct MemPool {
     pub transactions: HashMap<H256, SignedTransaction>,
     pub input_tran_map: HashMap<TxInput, (H256, u64)>, //Key: TxInput, Val: (hash, timestamp)
     pub ts_addr_map: HashMap<H256, Vec<(SocketAddr, i64)>>,
+    dandelion_buffer: HashMap<H256, SignedTransaction>,
 }
 
 impl MemPool {
@@ -23,6 +24,7 @@ impl MemPool {
             transactions: HashMap::new(),
             input_tran_map: HashMap::new(),
             ts_addr_map: HashMap::new(),
+            dandelion_buffer: HashMap::new(),
         }
     }
 
@@ -43,6 +45,10 @@ impl MemPool {
         return self.try_insert(tran);
     }
 
+    pub fn insert_buffer_tran(&mut self, tran: SignedTransaction) {
+        self.dandelion_buffer.insert(tran.hash.clone(), tran.clone());
+    }
+
     pub fn insert_ts_and_addr(&mut self, hash: H256, addr: SocketAddr) {
         if let Some(v) = self.ts_addr_map.get_mut(&hash) {
             v.push((addr, helper::get_current_time_in_nano()));
@@ -58,6 +64,7 @@ impl MemPool {
         debug!("Try to add {:?} into mempool", tran);
         let mut to_remove_hash: Vec<H256> = Vec::new();
         let ts = tran.transaction.ts;
+        self.remove_buffered_tran(&tran.hash);
         for input in tran.transaction.inputs.iter() {
             if let Some((conf_hash, conf_ts)) = self.input_tran_map.get(input) {
                 if ts < *conf_ts {
@@ -91,6 +98,14 @@ impl MemPool {
         if self.empty() {
             debug!("Mempool is empty!");
         }
+    }
+
+    pub fn contains_buffered_tran(&self, hash: &H256) -> bool {
+        return self.dandelion_buffer.contains_key(hash);
+    }
+
+    pub fn remove_buffered_tran(&mut self, hash: &H256) -> Option<SignedTransaction> {
+        return self.dandelion_buffer.remove(hash);
     }
 
     // Remove inputs conflict with already-inserted-to-blockchain ones
@@ -279,6 +294,28 @@ mod tests {
         assert!(!mempool.try_insert(&signed_tran_2));
         assert!(mempool.exist(&signed_tran_1.hash));
         assert!(!mempool.exist(&signed_tran_2.hash));
+    }
+
+    #[test]
+    fn test_dandelion_buffer() {
+        let key = key_pair::random();
+        let mut mempool = MemPool::new();
+        let h256 = generate_random_hash();
+        let input = TxInput {pre_hash: h256, index: 0};
+        let signed_tran_1 = generate_signed_transaction(&key, vec![input.clone()], Vec::new());
+        sleep(time::Duration::from_millis(2));
+        let signed_tran_2 = generate_signed_transaction(&key, vec![input.clone()], Vec::new());
+        assert!(!mempool.contains_buffered_tran(&signed_tran_1.hash));
+        assert!(!mempool.contains_buffered_tran(&signed_tran_2.hash));
+        mempool.insert_buffer_tran(signed_tran_1.clone());
+        assert!(mempool.contains_buffered_tran(&signed_tran_1.hash));
+        mempool.try_insert(&signed_tran_1);
+        assert!(!mempool.contains_buffered_tran(&signed_tran_1.hash));
+        mempool.insert_buffer_tran(signed_tran_2.clone());
+        assert!(mempool.contains_buffered_tran(&signed_tran_2.hash));
+        let tran_2 = mempool.remove_buffered_tran(&signed_tran_2.hash);
+        assert!(tran_2.is_some());
+        assert!(!mempool.contains_buffered_tran(&signed_tran_2.hash));
     }
 
     #[test]
