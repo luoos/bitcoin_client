@@ -24,7 +24,7 @@ pub static VALID_OUTPUTS_NUM: usize = 3; // number of valid tx_outputs in transa
 
 pub static REPEAT_TEST_TIME: usize = 20; // used for test repeatedly
 
-pub static SPREADER: Spreader = Spreader::Diffusion;
+pub static SPREADER: Spreader = Spreader::DandelionPlus;
 
 /*  Trickle Configuration */
 pub const TRICKLE_GAP_TIME: i64 = 200;
@@ -42,3 +42,7 @@ pub static EPOCH_MS: i64 = 5000; // time(ms) for each epoch in dandelion/dandeli
 pub static DANDELION_DEST_NUM: usize = 1; // number of destination peer of dandelion
 
 pub static DANDELION_PLUS_DEST_NUM: usize = 2; // number of destination peer of dandelion++
+
+pub static IS_DIFFUSER_PROB: u64 = 10; // probability(%) for a node to be a diffuser in this epoch
+
+pub const T_BASE: f32 = 10.0;

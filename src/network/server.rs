@@ -1,12 +1,14 @@
 use super::message;
 use super::peer::{self, ReadResult, WriteResult};
 use crate::spread;
+use crate::mempool::MemPool;
 
 use crossbeam::channel as cbchannel;
 use log::{debug, error, info, trace, warn};
 use mio::{self, net};
 use mio_extras::channel;
 use std::sync::mpsc;
+use std::sync::{Mutex, Arc};
 use std::thread;
 
 const MAX_INCOMING_CLIENT: usize = 256;
@@ -15,12 +17,14 @@ const MAX_EVENT: usize = 1024;
 pub fn new(
     addr: std::net::SocketAddr,
     msg_sink: cbchannel::Sender<(Vec<u8>, peer::Handle)>,
-    spreader: Box<dyn spread::Spreading + Send>,
-) -> std::io::Result<(Context, Handle)> {
+    spread_type: spread::Spreader,
+    mempool: Arc<Mutex<MemPool>>,
+) -> std::io::Result<(Context, Handle, spread::Context)> {
     let (control_signal_sender, control_signal_receiver) = channel::channel();
     let handle = Handle {
         control_chan: control_signal_sender,
     };
+    let (spreader, spread_ctx) = spread::get_spreader(spread_type, mempool, handle.clone());
     let ctx = Context {
         peers: slab::Slab::new(),
         peer_list: vec![],
@@ -28,10 +32,9 @@ pub fn new(
         poll: mio::Poll::new()?,
         control_chan: control_signal_receiver,
         new_msg_chan: msg_sink,
-        _handle: handle.clone(),
         spreader,
     };
-    Ok((ctx, handle))
+    Ok((ctx, handle, spread_ctx))
 }
 
 pub struct Context {
@@ -41,7 +44,6 @@ pub struct Context {
     poll: mio::Poll,
     control_chan: channel::Receiver<ControlSignal>,
     new_msg_chan: cbchannel::Sender<(Vec<u8>, peer::Handle)>,
-    _handle: Handle,
     spreader: Box<dyn spread::Spreading + Send>,
 }
 

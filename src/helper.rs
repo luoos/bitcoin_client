@@ -10,7 +10,7 @@ use crate::transaction_generator;
 use crate::network::{worker, server};
 use crate::account::Account;
 use crate::peers::Peers;
-use crate::spread::{self, Spreader};
+use crate::spread::Spreader;
 
 use log::{info, error};
 use rand::{Rng,thread_rng};
@@ -26,6 +26,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::iter::FromIterator;
 
 ///Network
 pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supernode: bool) -> (server::Handle, miner::Context, transaction_generator::Context,
@@ -44,10 +45,9 @@ pub fn new_server_env(ipv4_addr: SocketAddr, spreader_type : Spreader, is_supern
 
     let using_dandelion =  spreader_type == Spreader::Dandelion || spreader_type == Spreader::DandelionPlus;
 
-    let (spreader, spreader_ctx) = spread::get_spreader(spreader_type, mempool.clone());
-    spreader_ctx.start();
-    let (server_ctx, server) = server::new(ipv4_addr, sender, spreader).unwrap();
+    let (server_ctx, server, spreader_ctx) = server::new(ipv4_addr, sender, spreader_type, mempool.clone()).unwrap();
     server_ctx.start().unwrap();
+    spreader_ctx.start();
 
     let key_pair = Arc::new(key_pair::random());
     let account = Arc::new(Account::new(ipv4_addr.port(),key_pair.clone()));
@@ -260,12 +260,44 @@ pub fn generate_random_state(inputs: Vec<(H256, u32)>, outputs: Vec<(u64, H160)>
 }
 
 ///Dandelion
-pub fn get_k_random_peers(peer_list: &Vec<SocketAddr>, k: usize) -> Vec<SocketAddr> {
-    if peer_list.is_empty() {
+pub fn set_routing_table(peer_list: &Vec<usize>, table: &mut HashMap<usize, usize>) {
+    let outbound_peers = get_k_random_peers(peer_list, 2);
+    if outbound_peers.len() != 2 {
+        return
+    } else {
+        assert_ne!(outbound_peers[0], outbound_peers[1]);
+    }
+
+    let mut peer_set: HashSet<usize> = HashSet::from_iter(peer_list.clone());
+    peer_set.remove(&outbound_peers[0]);
+    peer_set.remove(&outbound_peers[1]);
+
+    // Only 2 outbound peers
+    let mut out_cnt1 = 0;
+    let mut out_cnt2 = 0;
+
+    assert!(table.is_empty());
+    // Handle 2 outbound peers separately
+    table.insert(outbound_peers[0], outbound_peers[1]);
+    table.insert(outbound_peers[1], outbound_peers[0]);
+
+    for peer in peer_set {
+        if out_cnt1 < out_cnt2 {
+            table.insert(peer, outbound_peers[0]);
+            out_cnt1 += 1;
+        } else {
+            table.insert(peer, outbound_peers[1]);
+            out_cnt2 += 1;
+        }
+    }
+}
+
+pub fn get_k_random_peers(peer_list: &Vec<usize>, k: usize) -> Vec<usize> {
+    if peer_list.len() <= k {
         return peer_list.to_owned()
     }
 
-    let mut selected_peer_list: Vec<SocketAddr> = Vec::new();
+    let mut selected_peer_list: Vec<usize> = Vec::new();
     let mut selected_idx: HashSet<u64> = HashSet::new();
 
     while selected_peer_list.len() < k {
@@ -273,25 +305,6 @@ pub fn get_k_random_peers(peer_list: &Vec<SocketAddr>, k: usize) -> Vec<SocketAd
         if !selected_idx.contains(&rand_idx) {
             selected_idx.insert(rand_idx);
             selected_peer_list.push(peer_list[rand_idx as usize]);
-        }
-    }
-    selected_peer_list
-}
-
-pub fn get_k_random_peers_from_idx(peer_list: &Vec<usize>, k: usize) -> Vec<usize> {
-    if peer_list.is_empty() {
-        return peer_list.to_owned()
-    }
-
-    let mut selected_peer_list: Vec<usize> = Vec::new();
-    let mut selected_idx: HashSet<u64> = HashSet::new();
-    let peer_num: u64 = peer_list.len() as u64;
-
-    while selected_peer_list.len() < k {
-        let rand_idx = gen_random_num(0, peer_num - 1);
-        if !selected_idx.contains(&rand_idx) {
-            selected_idx.insert(rand_idx);
-            selected_peer_list.push(rand_idx as usize);
         }
     }
     selected_peer_list
@@ -425,18 +438,35 @@ pub mod tests {
     }
 
     #[test]
+    fn test_set_routing_table() {
+        let mut peer_list: Vec<usize> = vec![0, 1, 2, 3];
+        let mut routing_table = HashMap::new();
+        set_routing_table(&peer_list, &mut routing_table);
+        assert_eq!(routing_table.len(), 4);
+        for (inbound, outbound) in routing_table.iter() {
+            println!("{:?} route to {:?}", inbound, outbound)
+        }
+        peer_list.pop();
+        routing_table.clear();
+        set_routing_table(&peer_list, &mut routing_table);
+        assert_eq!(routing_table.len(), 3);
+        for (inbound, outbound) in routing_table.iter() {
+            println!("{:?} route to {:?}", inbound, outbound)
+        }
+    }
+
+    #[test]
     fn test_get_k_random_peers() {
-        let base_addr = 19601;
-        let mut peers: Vec<SocketAddr> = vec![];
-        peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr));
-        let mut selected_peers: Vec<SocketAddr> = get_k_random_peers(&peers, 1);
+        let mut peer_list: Vec<usize> = vec![];
+        peer_list.push(0);
+        let mut selected_peers: Vec<usize> = get_k_random_peers(&peer_list, 1);
         assert_eq!(selected_peers.len(), 1);
-        peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr + 1));
-        selected_peers = get_k_random_peers(&peers, 2);
+        peer_list.push(1);
+        selected_peers = get_k_random_peers(&peer_list, 2);
         assert_eq!(selected_peers.len(), 2);
         assert_ne!(selected_peers[0], selected_peers[1]);
-        peers.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), base_addr + 2));
-        selected_peers = get_k_random_peers(&peers, 2);
+        peer_list.push(2);
+        selected_peers = get_k_random_peers(&peer_list, 2);
         assert_eq!(selected_peers.len(), 2);
         assert_ne!(selected_peers[0], selected_peers[1]);
     }

@@ -6,7 +6,7 @@ use crate::mempool::MemPool;
 use crate::transaction::{PrintableTransaction, SignedTransaction};
 use crate::transaction_generator::Handle as TxGeneratorHandle;
 use crate::peers::Peers;
-use crate::network::estimator::{start_first_timestamp_estimate, check_right_count};
+use crate::network::estimator::{start_first_timestamp_estimate};
 
 use log::info;
 use std::collections::HashMap;
@@ -34,12 +34,35 @@ struct ApiResponse {
     message: String,
 }
 
+#[derive(Serialize)]
+struct EstimatorRes {
+    success: bool,
+    recall: f64,
+    precision: f64,
+    mempool_size: usize,
+}
+
 macro_rules! respond_json {
     ($req:expr, $success:expr, $message:expr ) => {{
         let content_type = "Content-Type: application/json".parse::<Header>().unwrap();
         let payload = ApiResponse {
             success: $success,
             message: $message.to_string(),
+        };
+        let resp = Response::from_string(serde_json::to_string_pretty(&payload).unwrap())
+            .with_header(content_type);
+        $req.respond(resp).unwrap();
+    }};
+}
+
+macro_rules! check_estimator {
+    ($req:expr, $success:expr, $precision:expr, $recall:expr, $mempool_size:expr) => {{
+        let content_type = "Content-Type: application/json".parse::<Header>().unwrap();
+        let payload = EstimatorRes {
+            success: $success,
+            recall: $recall,
+            precision: $precision,
+            mempool_size: $mempool_size,
         };
         let resp = Response::from_string(serde_json::to_string_pretty(&payload).unwrap())
             .with_header(content_type);
@@ -189,14 +212,33 @@ impl Server {
                             respond_json!(req, true, "ok");
                         }
                         "/estimator/ft" => {
+                            let params = url.query_pairs();
+                            let params: HashMap<_, _> = params.into_owned().collect();
+                            let n = match params.get("n") {
+                                Some(v) => v,
+                                None => {
+                                    respond_json!(req, false, "missing lambda");
+                                    return;
+                                }
+                            };
+                            let n = match n.parse::<u64>() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    respond_json!(
+                                        req,
+                                        false,
+                                        format!("error parsing lambda: {}", e)
+                                    );
+                                    return;
+                                }
+                            };
                             let mem = mempool.lock().unwrap();
-                            let res = start_first_timestamp_estimate(&mem.transactions, &mem.ts_addr_map);
-                            println!("before peer_info");
+                            let mem_size = mem.size();
                             let peer_info = peers.lock().unwrap();
-                            println!("peer_info {:?}", peer_info.addrs);
-                            let correct_count = check_right_count(&res, &peer_info.info_map);
+                            let res = start_first_timestamp_estimate(&mem.transactions, &mem.ts_addr_map, &peer_info.info_map, n);
+//                            let correct_count = check_right_count(&res, &peer_info.info_map);
 
-                            respond_json!(req, true, correct_count.to_string());
+                            check_estimator!(req, true, res.0, res.1, mem_size);
                         }
                         _ => {
                             let content_type =
@@ -208,8 +250,8 @@ impl Server {
                             let resp = Response::from_string(
                                 serde_json::to_string_pretty(&payload).unwrap(),
                             )
-                            .with_header(content_type)
-                            .with_status_code(404);
+                                .with_header(content_type)
+                                .with_status_code(404);
                             req.respond(resp).unwrap();
                         }
                     }

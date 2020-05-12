@@ -76,7 +76,7 @@ impl MemPool {
         }
         // remove conflict trans
         for conf_hash in to_remove_hash.iter() {
-            self.transactions.remove(conf_hash);
+            self.remove_tran_internel(conf_hash);
         }
 
         for input in tran.transaction.inputs.iter() {
@@ -90,7 +90,7 @@ impl MemPool {
     pub fn remove_trans(&mut self, trans: &Vec<H256>) {
         for hash in trans.iter() {
             if let Some(_) = self.transactions.get(&hash) {
-                self.transactions.remove(&hash);
+                self.remove_tran_internel(&hash);
             } else {
                 debug!("{:?} not exist in the mempool!", hash);
             }
@@ -98,6 +98,11 @@ impl MemPool {
         if self.empty() {
             debug!("Mempool is empty!");
         }
+    }
+
+    fn remove_tran_internel(&mut self, hash: &H256) {
+        self.transactions.remove(hash);
+        self.dandelion_buffer.remove(hash);
     }
 
     pub fn contains_buffered_tran(&self, hash: &H256) -> bool {
@@ -115,7 +120,7 @@ impl MemPool {
             for input in inputs.iter() {
                 if let Some((tx_hash,_)) = self.input_tran_map.remove(input) {
                     debug!("Remove conflicting input from mempool {:?}", input);
-                    self.transactions.remove(&tx_hash);
+                    self.remove_tran_internel(&tx_hash);
                 }
             }
         }

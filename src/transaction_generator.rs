@@ -177,7 +177,6 @@ impl Context {
                 }
             }
         }
-
     }
 
     // Pick single random peer to as receiver of new transaction

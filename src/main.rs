@@ -76,13 +76,11 @@ fn run_regular_server(matches: ArgMatches) {
     let mempool = Arc::new(Mutex::new(MemPool::new()));
 
     let spreader_type = config::SPREADER;
-    let using_dandelion =  spreader_type == Spreader::Dandelion || spreader_type == Spreader::DandelionPlus;
-
-    let (spreader, spreader_ctx) = spread::get_spreader(spreader_type, mempool.clone());
-    spreader_ctx.start();
+    let using_dandelion = spreader_type == Spreader::Dandelion || spreader_type == Spreader::DandelionPlus;
     // start the p2p server
-    let (server_ctx, server) = server::new(p2p_addr, msg_tx, spreader).unwrap();
+    let (server_ctx, server, spreader_ctx) = server::new(p2p_addr, msg_tx, spreader_type, mempool.clone()).unwrap();
     server_ctx.start().unwrap();
+    spreader_ctx.start();
 
     // start the worker
     let p2p_workers = matches
@@ -221,9 +219,9 @@ fn run_supernode(matches: ArgMatches) {
         let account  = Arc::new(Account::new(addr.port(), key_pair.clone()));
         let pub_key = account.get_pub_key();
 
-        let (spreader, _) = spread::get_spreader(spread::Spreader::Default, mempool.clone());
-        let (server_ctx, server) = server::new(addr.clone(), msg_tx, spreader).unwrap();
+        let (server_ctx, server, spreader_ctx) = server::new(addr.clone(), msg_tx, spread::Spreader::Default, mempool.clone()).unwrap();
         server_ctx.start().unwrap();
+        spreader_ctx.start();
 
         let mut worker_ctx = worker::new(
             1,
@@ -244,8 +242,7 @@ fn run_supernode(matches: ArgMatches) {
     }
 
     let (msg_tx, _) = channel::unbounded();
-    let (spreader, _) = spread::get_spreader(spread::Spreader::Default, mempool.clone());
-    let (_, server) = server::new(nodes_addr[0], msg_tx, spreader).unwrap();  // Fake
+    let (_, server, _) = server::new(nodes_addr[0], msg_tx, spread::Spreader::Default, mempool.clone()).unwrap();  // Fake
 
     let port = p2p_addr.port();
     let key_pair = Arc::new(key_pair::random()); // Fake
