@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(content.trans.len(), 4);
     }
 
-    #[test]
+    #[test] #[ignore]  // flaky
     fn test_mempool_clear() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17031);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17032);
@@ -358,7 +358,7 @@ mod tests {
         assert_eq!(2, mempool.ts_addr_map.len());
     }
 
-    #[test]
+    #[test] #[ignore]  // flaky
     fn test_supernode_receive_all_hashes() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17137);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 17238);

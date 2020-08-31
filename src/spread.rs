@@ -458,7 +458,7 @@ mod tests {
         assert_eq!(expect_size, cur);
     }
 
-    #[test]
+    #[test] #[ignore]  // flaky
     fn test_trickle_transaction_relay() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18031);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18032);
@@ -502,7 +502,7 @@ mod tests {
         assert_eq!(pool_2.size(), pool_3.size());
     }
 
-    #[test]
+    #[test] #[ignore]  // flaky
     fn test_diffusion_transaction_relay() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19031);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 19032);
@@ -532,7 +532,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test] #[ignore]  // flaky
     fn test_dandelion_reset_epoch() {
         let p2p_addr_1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18234);
         let p2p_addr_2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18335);
